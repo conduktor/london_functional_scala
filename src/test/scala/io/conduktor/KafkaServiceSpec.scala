@@ -1,7 +1,7 @@
 package io.conduktor
 
 import com.dimafeng.testcontainers.KafkaContainer
-import io.conduktor.KafkaService.TopicName
+import io.conduktor.KafkaService.{BrokerId, Partition, PartitionInfo, TopicDescription, TopicName}
 import zio._
 import zio.kafka.admin.{AdminClient, AdminClientSettings}
 import zio.kafka.admin.AdminClient.NewTopic
@@ -55,7 +55,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
           _ <- KafkaAdmin.createTopic(topicName1)
           _ <- KafkaAdmin.createTopic(topicName2)
           result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(topicName1 :: topicName2 :: Nil))
-        } yield assertTrue(result == Seq.empty)
+        } yield assertTrue(result == List(TopicDescription(partition = Map(Partition(1) -> PartitionInfo(Some(BrokerId("1")), Seq.empty)), replicationFactor = 1)))
       }
     ).provideShared(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings)
   )

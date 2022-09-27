@@ -1,6 +1,6 @@
 package io.conduktor
 
-import io.conduktor.KafkaService.{BrokerId, Offset, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, TopicDescription, TopicName, TopicPartition, TopicSize}
 import zio.kafka.admin.AdminClient
 import zio.{Task, ZIO, ZLayer}
 
@@ -31,7 +31,7 @@ object KafkaService {
 
   case class BrokerId(value: String) extends AnyVal
 
-  case class PartitionInfo(leader: BrokerId, aliveReplicas: Seq[BrokerId])
+  case class PartitionInfo(leader: Option[BrokerId], aliveReplicas: Seq[BrokerId])
 
   case class TopicDescription(partition: Map[Partition, PartitionInfo], replicationFactor: Int)
 
@@ -44,7 +44,21 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .listTopics()
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
-  override def describeTopics(topicNames: Seq[TopicName]): Task[Seq[TopicDescription]] = ZIO.succeed(Seq.empty)
+  override def describeTopics(topicNames: Seq[TopicName]): Task[Seq[TopicDescription]] =
+    adminClient.describeTopics(topicNames.map(_.value))
+      .map(
+        _.values.map(description => {
+          val info: Map[Partition, PartitionInfo] = description.partitions.map(partitionInfo => {
+            Partition(partitionInfo.partition) ->
+              PartitionInfo(
+                leader = partitionInfo.leader.flatMap(_.host).map(BrokerId.apply),
+                aliveReplicas = partitionInfo.replicas.flatMap(_.host).map(BrokerId.apply))
+          }).toMap
+          TopicDescription(partition = info, replicationFactor = 5)
+        }
+
+        ).toList
+      )
 
   override def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]] = ???
 
