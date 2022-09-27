@@ -1,8 +1,8 @@
 package io.conduktor
 
-import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService.{BrokerId, Offset, Offsets, Partition, PartitionInfo, TopicDescription, TopicName, TopicPartition, TopicSize}
 import zio.kafka.admin.AdminClient
-import zio.kafka.admin.AdminClient.{Node, TopicPartitionInfo}
+import zio.kafka.admin.AdminClient.{Node, OffsetSpec, TopicPartitionInfo}
 import zio.{Task, ZIO, ZLayer}
 
 trait KafkaService {
@@ -12,9 +12,7 @@ trait KafkaService {
 
   def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
-  def beginOffset(topicPartition: TopicPartition): Task[Offset]
-
-  def endOffset(topicPartition: TopicPartition): Task[Offset]
+  def offsets(topicPartition: Seq[TopicPartition]): Task[Map[TopicPartition, Offsets]]
 }
 
 object KafkaService {
@@ -22,9 +20,13 @@ object KafkaService {
 
   case class Partition(value: Int) extends AnyVal
 
-  case class TopicPartition(topic: TopicName, partition: Partition)
+  case class TopicPartition(topic: TopicName, partition: Partition) {
+    def toZioKafka: AdminClient.TopicPartition = AdminClient.TopicPartition(topic.value, partition.value)
+  }
 
   case class RecordCount(value: Long) extends AnyVal
+
+  case class Offsets(beginOffset: Offset, endOffset: Offset)
 
   case class TopicSize(value: Long) extends AnyVal
 
@@ -80,9 +82,25 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
 
   override def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]] = ???
 
-  override def beginOffset(topicPartition: TopicPartition): Task[Offset] = ???
+  def offsets2(topicPartition: TopicPartition): Task[Offset] =
+    adminClient
+      .listOffsets(Map(topicPartition.toZioKafka -> OffsetSpec.EarliestSpec))
+      .map{offsets =>
+        Offset(offsets.values.head.offset)
+      }
 
-  override def endOffset(topicPartition: TopicPartition): Task[Offset] = ???
+  override def offsets(topicPartition: Seq[TopicPartition]): Task[Map[TopicPartition, Offsets]] =
+    ???
+    //adminClient
+    //  .listOffsets(topicPartition.flatMap{ topicPartition =>
+    //    val zioKafkaTopicPartition = topicPartition.toZioKafka
+    //    Seq(zioKafkaTopicPartition -> OffsetSpec.EarliestSpec, zioKafkaTopicPartition -> OffsetSpec.LatestSpec)
+    //  }.toMap)
+    //  .map{offsets =>
+    //    offsets.groupBy{offset =>
+    //      KafkaService.TopicPartition(topic = TopicName(offset._1.name), partition = Partition(offset._1.partition))
+    //    }
+    //  }
 }
 
 object KafkaServiceLive {

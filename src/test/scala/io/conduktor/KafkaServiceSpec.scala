@@ -1,10 +1,12 @@
 package io.conduktor
 
 import com.dimafeng.testcontainers.KafkaContainer
-import io.conduktor.KafkaService.{BrokerId, Partition, PartitionInfo, TopicDescription, TopicName}
+import io.conduktor.KafkaService._
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import zio._
-import zio.kafka.admin.{AdminClient, AdminClientSettings}
 import zio.kafka.admin.AdminClient.NewTopic
+import zio.kafka.admin.{AdminClient, AdminClientSettings}
+import zio.test.Assertion._
 import zio.test._
 
 object KafkaTestContainer {
@@ -74,11 +76,18 @@ object KafkaServiceSpec extends ZIOSpecDefault {
   )
 
   private val beginOffsetSpec = suite("beginOffsets") (
-    test("should return 0 for empty topic") {
-      for {
-        result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(Seq.empty))
-      } yield assertTrue(result == Map.empty[TopicName, TopicDescription])
-    }
+    //test("should fail on unknown partition") {
+    //  for {
+    //    result <- ZIO.serviceWithZIO[KafkaService](_.offsets(TopicPartition(TopicName("topicnambur"), Partition(1)))).exit
+    //  } yield assert(result)(fails(isSubtype[UnknownTopicOrPartitionException](anything)))
+    //},
+    //test("should return 0 for empty topic partition") {
+    //  val topicName = TopicName("yo")
+    //  for {
+    //    _ <- KafkaAdmin.createTopic(name = topicName, numPartition = 1)
+    //    result <- ZIO.serviceWithZIO[KafkaService](_.offsets(TopicPartition(topicName, Partition(0))))
+    //  } yield assertTrue(result == Offset(0L))
+    //}
   )
 
   override def spec = suite("KafkaService")(
