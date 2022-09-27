@@ -46,16 +46,30 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       test("empty input topic list should return empty result") {
         for {
           result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(Seq.empty))
-        } yield assertTrue(result == Seq.empty)
+        } yield assertTrue(result == Map.empty[TopicName, TopicDescription])
       },
       test("should properly describe two topics") {
         val topicName1 = TopicName("one")
         val topicName2 = TopicName("two")
         for {
-          _ <- KafkaAdmin.createTopic(topicName1)
-          _ <- KafkaAdmin.createTopic(topicName2)
-          result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(topicName1 :: topicName2 :: Nil))
-        } yield assertTrue(result == List(TopicDescription(partition = Map(Partition(1) -> PartitionInfo(Some(BrokerId("1")), Seq.empty)), replicationFactor = 1)))
+          _ <- KafkaAdmin.createTopic(name = topicName1, numPartition = 3)
+          _ <- KafkaAdmin.createTopic(name = topicName2, numPartition = 2)
+          result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(Seq(topicName1, topicName2)))
+          expected = Map(
+            topicName1 -> TopicDescription(
+              partition = Map(
+                Partition(0) -> PartitionInfo(leader = Some(BrokerId(1)), aliveReplicas = List(BrokerId(1))),
+                Partition(1) -> PartitionInfo(leader = Some(BrokerId(1)), aliveReplicas = List(BrokerId(1))),
+                Partition(2) -> PartitionInfo(leader = Some(BrokerId(1)), aliveReplicas = List(BrokerId(1)))
+              ), replicationFactor = 1),
+            topicName2 -> TopicDescription(
+              partition = Map(
+                Partition(0) -> PartitionInfo(leader = Some(BrokerId(1)), aliveReplicas = List(BrokerId(1))),
+                Partition(1) -> PartitionInfo(leader = Some(BrokerId(1)), aliveReplicas = List(BrokerId(1)))
+              )
+              , replicationFactor = 1),
+          )
+        } yield assertTrue(result == expected)
       }
     ).provideShared(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings)
   )
