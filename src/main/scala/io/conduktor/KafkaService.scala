@@ -7,7 +7,7 @@ import zio.{Task, ZIO, ZLayer}
 trait KafkaService {
   def listTopicNames: Task[Seq[TopicName]]
 
-  def describeTopics: Task[Seq[TopicDescription]]
+  def describeTopics(topicNames: Seq[TopicName]): Task[Seq[TopicDescription]]
 
   def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
@@ -44,7 +44,7 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .listTopics()
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
-  override def describeTopics: Task[Seq[TopicDescription]] = ???
+  override def describeTopics(topicNames: Seq[TopicName]): Task[Seq[TopicDescription]] = ZIO.succeed(Seq.empty)
 
   override def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]] = ???
 

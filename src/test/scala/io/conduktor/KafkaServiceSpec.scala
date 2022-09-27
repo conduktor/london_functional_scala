@@ -23,21 +23,38 @@ object KafkaAdmin {
     ZIO.serviceWith[KafkaContainer](container => AdminClientSettings(container.bootstrapServers :: Nil))
   }
 
-  def createTopic(name: TopicName): URIO[AdminClient, Unit] = ZIO.serviceWithZIO[AdminClient](_.createTopic(NewTopic(name = name.value, numPartitions = 3, replicationFactor = 1))).orDie
+  def createTopic(name: TopicName, numPartition: Int = 3): URIO[AdminClient, Unit] = ZIO.serviceWithZIO[AdminClient](_.createTopic(NewTopic(name = name.value, numPartitions = numPartition, replicationFactor = 1))).orDie
 }
 
 object KafkaServiceSpec extends ZIOSpecDefault {
   override def spec = suite("KafkaService")(
-    test("should list topics") {
-      for {
-        topics <- ZIO.serviceWithZIO[KafkaService](_.listTopicNames)
-      } yield assertTrue(topics.isEmpty)
-    },
-    test("should list topics") {
-      for {
-        _ <- KafkaAdmin.createTopic(TopicName("foo"))
-        topics <- ZIO.serviceWithZIO[KafkaService](_.listTopicNames)
-      } yield assertTrue(topics == Seq(TopicName("foo")))
-    }
-  ).provide(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings)
+    suite("listTopics")(
+      test("should list topics when empty") {
+        for {
+          topics <- ZIO.serviceWithZIO[KafkaService](_.listTopicNames)
+        } yield assertTrue(topics.isEmpty)
+      },
+      test("should list topics") {
+        val topicName = TopicName("foo")
+        for {
+          _ <- KafkaAdmin.createTopic(topicName)
+          topics <- ZIO.serviceWithZIO[KafkaService](_.listTopicNames)
+        } yield assertTrue(topics == Seq(topicName))
+      }
+    ).provide(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings),
+    suite("describeTopics")(
+      test("empty input topic list should return empty result") {
+        for {
+          result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(Seq.empty))
+        } yield assertTrue(result == Seq.empty)
+      },
+      test("should properly describe two topics") {
+        val topicName1 = TopicName("one")
+        val topicName2 = TopicName("two")
+        for {
+          _ <- KafkaAdmin.createTopic(topicName1)
+        }
+      }
+    ).provide(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings)
+  )
 }
