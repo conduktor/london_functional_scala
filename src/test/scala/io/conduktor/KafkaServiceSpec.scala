@@ -53,8 +53,10 @@ object KafkaServiceSpec extends ZIOSpecDefault {
         val topicName2 = TopicName("two")
         for {
           _ <- KafkaAdmin.createTopic(topicName1)
-        }
+          _ <- KafkaAdmin.createTopic(topicName2)
+          result <- ZIO.serviceWithZIO[KafkaService](_.describeTopics(topicName1 :: topicName2 :: Nil))
+        } yield assertTrue(result == Seq.empty)
       }
-    ).provide(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings)
+    ).provideShared(KafkaTestContainer.kafkaLayer, KafkaServiceLive.layer, AdminClient.live, KafkaAdmin.adminClientSettings)
   )
 }
