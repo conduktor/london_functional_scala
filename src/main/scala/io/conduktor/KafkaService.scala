@@ -1,6 +1,7 @@
 package io.conduktor
 
 import io.conduktor.KafkaService.{BrokerId, Offset, TopicDescription, TopicName, TopicPartition, TopicSize}
+import zio.kafka.admin.AdminClient
 import zio.{Task, ZIO, ZLayer}
 
 trait KafkaService {
@@ -37,8 +38,11 @@ object KafkaService {
   case class Offset(value: Long)
 }
 
-class KafkaServiceLive() extends KafkaService {
-  override def listTopicNames: Task[Seq[TopicName]] = ZIO.succeed(Seq.empty)
+class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
+  override def listTopicNames: Task[Seq[TopicName]] =
+    adminClient
+      .listTopics()
+      .map(_.values.map(listing => TopicName(listing.name)).toList)
 
   override def describeTopics: Task[Seq[TopicDescription]] = ???
 
@@ -50,5 +54,9 @@ class KafkaServiceLive() extends KafkaService {
 }
 
 object KafkaServiceLive {
-  val layer = ZLayer.succeed(new KafkaServiceLive)
+  val layer = ZLayer {
+    for {
+      adminClient <- ZIO.service[AdminClient]
+    } yield new KafkaServiceLive(adminClient)
+  }
 }
