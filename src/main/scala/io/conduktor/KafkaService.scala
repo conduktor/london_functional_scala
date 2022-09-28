@@ -1,6 +1,6 @@
 package io.conduktor
 
-import io.conduktor.KafkaService.{BrokerId, Offset, Offsets, Partition, PartitionInfo, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService._
 import zio.kafka.admin.AdminClient
 import zio.kafka.admin.AdminClient.{Node, OffsetSpec, TopicPartitionInfo}
 import zio.{Task, ZIO, ZLayer}
@@ -8,11 +8,15 @@ import zio.{Task, ZIO, ZLayer}
 trait KafkaService {
   def listTopicNames: Task[Seq[TopicName]]
 
-  def describeTopics(topicNames: Seq[TopicName]): Task[Map[TopicName, TopicDescription]]
+  def describeTopics(
+      topicNames: Seq[TopicName]
+  ): Task[Map[TopicName, TopicDescription]]
 
   def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
-  def offsets(topicPartition: Seq[TopicPartition]): Task[Map[TopicPartition, Offsets]]
+  def offsets(
+      topicPartition: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offsets]]
 }
 
 object KafkaService {
@@ -21,7 +25,15 @@ object KafkaService {
   case class Partition(value: Int) extends AnyVal
 
   case class TopicPartition(topic: TopicName, partition: Partition) {
-    def toZioKafka: AdminClient.TopicPartition = AdminClient.TopicPartition(topic.value, partition.value)
+    def toZioKafka: AdminClient.TopicPartition =
+      AdminClient.TopicPartition(topic.value, partition.value)
+  }
+  object TopicPartition {
+    def from(topicPartition: AdminClient.TopicPartition): TopicPartition =
+      TopicPartition(
+        TopicName(topicPartition.name),
+        Partition(topicPartition.partition)
+      )
   }
 
   case class RecordCount(value: Long) extends AnyVal
@@ -34,21 +46,33 @@ object KafkaService {
 
   case class BrokerId(value: Int) extends AnyVal
   object BrokerId {
-    def apply(node: Node): BrokerId = BrokerId(node.id)
+    def from(node: Node): BrokerId = BrokerId(node.id)
   }
 
-  case class PartitionInfo(leader: Option[BrokerId], aliveReplicas: Seq[BrokerId])
+  case class PartitionInfo(
+      leader: Option[BrokerId],
+      aliveReplicas: Seq[BrokerId]
+  )
   object PartitionInfo {
-    def apply(partition: TopicPartitionInfo): PartitionInfo =
-      PartitionInfo(partition.leader.map(BrokerId(_)), partition.isr.map(BrokerId(_)))
+    def from(partition: TopicPartitionInfo): PartitionInfo =
+      PartitionInfo(
+        partition.leader.map(BrokerId.from),
+        partition.isr.map(BrokerId.from)
+      )
   }
 
-  case class TopicDescription(partition: Map[Partition, PartitionInfo], replicationFactor: Int)
+  case class TopicDescription(
+      partition: Map[Partition, PartitionInfo],
+      replicationFactor: Int
+  )
   object TopicDescription {
-    def apply(topicDescription: AdminClient.TopicDescription): TopicDescription =
-      TopicDescription(topicDescription.partitions.map { partition =>
-        Partition(partition.partition) -> PartitionInfo(partition)
-      }.toMap, topicDescription.partitions.map(_.replicas.length).head) //TODO: rework head?
+    def from(topicDescription: AdminClient.TopicDescription): TopicDescription =
+      TopicDescription(
+        topicDescription.partitions.map { partition =>
+          Partition(partition.partition) -> PartitionInfo.from(partition)
+        }.toMap,
+        topicDescription.partitions.map(_.replicas.length).head
+      ) //TODO: rework head?
 
   }
 
@@ -61,46 +85,55 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .listTopics()
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
-  override def describeTopics(topicNames: Seq[TopicName]): Task[Map[TopicName, TopicDescription]] = {
-    //fix that shit
-    adminClient.describeTopics(topicNames.map(_.value))
-      .map(
-        _.values.map(description => {
-          val info: Map[Partition, PartitionInfo] = description.partitions.map(partitionInfo => {
-            Partition(partitionInfo.partition) ->
-              PartitionInfo(
-                leader = partitionInfo.leader.map(_.id).map(BrokerId.apply),
-                aliveReplicas = partitionInfo.replicas.map(_.id).map(BrokerId.apply))
-          }).toMap
-          TopicDescription(partition = info, replicationFactor = 5)
+  override def describeTopics(
+      topicNames: Seq[TopicName]
+  ): Task[Map[TopicName, TopicDescription]] = {
+    adminClient
+      .describeTopics(topicNames.map(_.value))
+      .map(topicDescription =>
+        topicDescription.map { case (topicName, topicDescription) =>
+          TopicName(topicName) -> TopicDescription.from(topicDescription)
         }
-
-        ).toList
       )
-    ???
   }
 
-  override def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]] = ???
+  override def describeLogDirs(
+      brokerId: BrokerId
+  ): Task[Map[TopicPartition, TopicSize]] = ???
 
   def offsets2(topicPartition: TopicPartition): Task[Offset] =
     adminClient
       .listOffsets(Map(topicPartition.toZioKafka -> OffsetSpec.EarliestSpec))
-      .map{offsets =>
+      .map { offsets =>
         Offset(offsets.values.head.offset)
       }
 
-  override def offsets(topicPartition: Seq[TopicPartition]): Task[Map[TopicPartition, Offsets]] =
-    ???
-    //adminClient
-    //  .listOffsets(topicPartition.flatMap{ topicPartition =>
-    //    val zioKafkaTopicPartition = topicPartition.toZioKafka
-    //    Seq(zioKafkaTopicPartition -> OffsetSpec.EarliestSpec, zioKafkaTopicPartition -> OffsetSpec.LatestSpec)
-    //  }.toMap)
-    //  .map{offsets =>
-    //    offsets.groupBy{offset =>
-    //      KafkaService.TopicPartition(topic = TopicName(offset._1.name), partition = Partition(offset._1.partition))
-    //    }
-    //  }
+  override def offsets(
+      topicPartition: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offsets]] =
+    adminClient
+      .listOffsets(topicPartition.flatMap { topicPartition =>
+        val zioKafkaTopicPartition = topicPartition.toZioKafka
+        Seq(
+          zioKafkaTopicPartition -> OffsetSpec.EarliestSpec
+          //zioKafkaTopicPartition -> OffsetSpec.LatestSpec
+        )
+      }.toMap)
+      .map { offsets =>
+        offsets.groupBy(_._1).map { case (kafkaTopicPartition, offsetMap) =>
+          val offsets = offsetMap.values.toSeq match {
+            case Seq(first, last) if first.offset < last.offset =>
+              Offsets(Offset(first.offset), Offset(last.offset))
+            case Seq(first, last) =>
+              Offsets(Offset(last.offset), Offset(first.offset))
+            case other =>
+              throw new RuntimeException(
+                other.toString()
+              ) //TODO: rework that shit
+          }
+          TopicPartition.from(kafkaTopicPartition) -> offsets
+        }
+      }
 }
 
 object KafkaServiceLive {
