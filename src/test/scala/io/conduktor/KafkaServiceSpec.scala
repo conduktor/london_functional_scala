@@ -144,7 +144,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       for {
         result <- ZIO
           .serviceWithZIO[KafkaService](
-            _.offsets(
+            _.beginningOffsets(
               Seq(TopicPartition(TopicName("topicnambur"), Partition(1)))
             )
           )
@@ -160,7 +160,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
         _ <- KafkaAdmin.createTopic(name = topicName, numPartition = 1)
         _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
         result <- ZIO.serviceWithZIO[KafkaService](
-          _.offsets(Seq(topicPartition))
+          _.beginningOffsets(Seq(topicPartition))
         )
       } yield assertTrue(
         result == Map(topicPartition -> Offsets(Offset(0), Offset(1)))

@@ -14,9 +14,13 @@ trait KafkaService {
 
   def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
-  def offsets(
+  def beginningOffsets(
       topicPartition: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offsets]]
+  ): Task[Map[TopicPartition, Offset]]
+
+  def endOffsets(
+      topicPartition: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]]
 }
 
 object KafkaService {
@@ -108,32 +112,29 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
         Offset(offsets.values.head.offset)
       }
 
-  override def offsets(
-      topicPartition: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offsets]] =
+  private def offsets(
+      topicPartition: Seq[TopicPartition],
+      offsetSpec: OffsetSpec
+  ): Task[Map[TopicPartition, Offset]] =
     adminClient
-      .listOffsets(topicPartition.flatMap { topicPartition =>
-        val zioKafkaTopicPartition = topicPartition.toZioKafka
-        Seq(
-          zioKafkaTopicPartition -> OffsetSpec.EarliestSpec
-          //zioKafkaTopicPartition -> OffsetSpec.LatestSpec
-        )
+      .listOffsets(topicPartition.map { topicPartition =>
+        topicPartition.toZioKafka -> offsetSpec
       }.toMap)
       .map { offsets =>
-        offsets.groupBy(_._1).map { case (kafkaTopicPartition, offsetMap) =>
-          val offsets = offsetMap.values.toSeq match {
-            case Seq(first, last) if first.offset < last.offset =>
-              Offsets(Offset(first.offset), Offset(last.offset))
-            case Seq(first, last) =>
-              Offsets(Offset(last.offset), Offset(first.offset))
-            case other =>
-              throw new RuntimeException(
-                other.toString()
-              ) //TODO: rework that shit
-          }
-          TopicPartition.from(kafkaTopicPartition) -> offsets
+        offsets.map { case (kafkaTopicPartition, offset) =>
+          TopicPartition.from(kafkaTopicPartition) -> Offset(offset.offset)
         }
       }
+
+  override def beginningOffsets(
+      topicPartition: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]] =
+    offsets(topicPartition, OffsetSpec.EarliestSpec)
+
+  override def endOffsets(
+      topicPartition: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]] =
+    offsets(topicPartition, OffsetSpec.LatestSpec)
 }
 
 object KafkaServiceLive {
