@@ -105,13 +105,6 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       brokerId: BrokerId
   ): Task[Map[TopicPartition, TopicSize]] = ???
 
-  def offsets2(topicPartition: TopicPartition): Task[Offset] =
-    adminClient
-      .listOffsets(Map(topicPartition.toZioKafka -> OffsetSpec.EarliestSpec))
-      .map { offsets =>
-        Offset(offsets.values.head.offset)
-      }
-
   private def offsets(
       topicPartition: Seq[TopicPartition],
       offsetSpec: OffsetSpec

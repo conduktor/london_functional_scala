@@ -139,7 +139,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     }
   )
 
-  private val beginOffsetSpec = suite("beginOffsets")(
+  private val beginningOffsetsSpec = suite("beginningOffsets")(
     test("should fail on unknown partition") {
       for {
         result <- ZIO
@@ -158,12 +158,65 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       val topicPartition = TopicPartition(topicName, Partition(0))
       for {
         _ <- KafkaAdmin.createTopic(name = topicName, numPartition = 1)
+        result <- ZIO.serviceWithZIO[KafkaService](
+          _.beginningOffsets(Seq(topicPartition))
+        )
+      } yield assertTrue(
+        result == Map(topicPartition -> Offset(0))
+      )
+    },
+    test("should return 0 for non empty topic partition") {
+      val topicName = TopicName("ya")
+      val topicPartition = TopicPartition(topicName, Partition(0))
+      for {
+        _ <- KafkaAdmin.createTopic(name = topicName, numPartition = 1)
         _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
         result <- ZIO.serviceWithZIO[KafkaService](
           _.beginningOffsets(Seq(topicPartition))
         )
       } yield assertTrue(
-        result == Map(topicPartition -> Offsets(Offset(0), Offset(1)))
+        result == Map(topicPartition -> Offset(0))
+      )
+    }
+  )
+
+  private val endOffsetsSpec = suite("endOffsets")(
+    test("should fail on unknown partition") {
+      for {
+        result <- ZIO
+          .serviceWithZIO[KafkaService](
+            _.endOffsets(
+              Seq(TopicPartition(TopicName("topicnambur"), Partition(1)))
+            )
+          )
+          .exit
+      } yield assert(result)(
+        fails(isSubtype[UnknownTopicOrPartitionException](anything))
+      )
+    },
+    test("should return 0 for empty topic partition") {
+      val topicName = TopicName("yoyo")
+      val topicPartition = TopicPartition(topicName, Partition(0))
+      for {
+        _ <- KafkaAdmin.createTopic(name = topicName, numPartition = 1)
+        result <- ZIO.serviceWithZIO[KafkaService](
+          _.endOffsets(Seq(topicPartition))
+        )
+      } yield assertTrue(
+        result == Map(topicPartition -> Offset(0))
+      )
+    },
+    test("should return 1 for non empty topic partition") {
+      val topicName = TopicName("yaya")
+      val topicPartition = TopicPartition(topicName, Partition(0))
+      for {
+        _ <- KafkaAdmin.createTopic(name = topicName, numPartition = 1)
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        result <- ZIO.serviceWithZIO[KafkaService](
+          _.endOffsets(Seq(topicPartition))
+        )
+      } yield assertTrue(
+        result == Map(topicPartition -> Offset(1))
       )
     }
   )
@@ -175,12 +228,17 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       AdminClient.live,
       KafkaAdmin.adminClientSettings
     ),
-    suite("shared kafka")(describeTopicsSpec, beginOffsetSpec).provideShared(
-      KafkaTestContainer.kafkaLayer,
-      KafkaServiceLive.layer,
-      AdminClient.live,
-      KafkaAdmin.adminClientSettings,
-      KafkaUtils.producerLayer
+    suite("shared kafka")(
+      describeTopicsSpec,
+      beginningOffsetsSpec,
+      endOffsetsSpec
     )
+      .provideShared(
+        KafkaTestContainer.kafkaLayer,
+        KafkaServiceLive.layer,
+        AdminClient.live,
+        KafkaAdmin.adminClientSettings,
+        KafkaUtils.producerLayer
+      )
   )
 }
