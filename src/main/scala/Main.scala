@@ -8,11 +8,13 @@ import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
 import sttp.tapir.ztapir._
-import zhttp.http.{Http, HttpApp, Request, Response}
+import zhttp.http.middleware.Cors.CorsConfig
+import zhttp.http.{Http, HttpApp, Method, Middleware, Request, Response}
 import zhttp.service.Server
 import zio._
 
 case class TopicData(name: String, sizeInByte: String, partitions: String, recordCount: String, spread: String, replicationFactor: String)
+
 
 
 object ZioHttpServer extends ZIOAppDefault {
@@ -36,7 +38,15 @@ object ZioHttpServer extends ZIOAppDefault {
     ZioHttpInterpreter().toHttp(someTopics.zServerLogic(_ => ZIO.succeed(someDatas)))
 
   // converting the endpoint descriptions to the Http type
-  val app: HttpApp[Any, Throwable] = someTopicsData
+  val config: CorsConfig =
+    CorsConfig(
+      anyOrigin = true,
+      anyMethod = true,
+      allowedOrigins = s => s.equals("localhost"),
+      allowedMethods = Some(Set(Method.GET, Method.POST))
+    )
+
+  val app: HttpApp[Any, Throwable] = someTopicsData @@ Middleware.cors(config)
 
   // starting the server
   override def run =

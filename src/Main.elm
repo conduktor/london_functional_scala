@@ -1,30 +1,90 @@
 module Main exposing (..)
 
-import Html exposing (table, text, td, tr, th, Html, Attribute)
-import Html.Attributes exposing (style)
+import Browser
+import Html exposing (Html, pre, text, div)
+import Http
+import Json.Decode as Decode
+import Table exposing (..)
 
-headers = ["topic", "size in bytes", "partitions", "records count", "spread", "replication factor"]
-data = [["topicnambur", "4232", "3", "42", "1", "3"],
-        ["topicat", "32", "2", "32", "0.8", "2"],
-        ["tropical", "4232", "3", "42", "1", "3"]]
+main =
+  Browser.element
+    { init = init
+    , update = update
+    , subscriptions = subscriptions
+    , view = view
+    }
 
 
 
-borderStyle = [style "border" "1px solid black", style "border-collapse" "collapse"]
+-- MODEL
 
-datapointToCell: String -> Html msg
-datapointToCell s = td borderStyle [text s]
-headerToCell s = th borderStyle [text s]
 
-arrayToTr f s = List.map f s |> tr borderStyle
+type Model
+  = Failure
+  | Loading
+  | Success (List TopicInfo)
 
-topicToHtml : List String -> Html msg
-topicToHtml = arrayToTr datapointToCell
+topicDecoder : Decode.Decoder TopicInfo
+topicDecoder =
+    Decode.map6 TopicInfo
+        (Decode.field "name" Decode.string)
+        (Decode.field "sizeInByte" Decode.string)
+        (Decode.field "partitions" Decode.string)
+        (Decode.field "recordCount" Decode.string)
+        (Decode.field "spread" Decode.string)
+        (Decode.field "replicationFactor" Decode.string)
 
-headerLine = arrayToTr headerToCell headers
+topicsDecoder = Decode.list topicDecoder
 
-main = table borderStyle (List.append
-        [headerLine]
-        (List.map topicToHtml data)
-    )
+init : () -> (Model, Cmd Msg)
+init _ =
+  ( Loading
+  , Http.get
+      { url = "http://localhost:8090/hello/Thibaut"
+      , expect = Http.expectJson GotTopics topicsDecoder
+      }
+  )
 
+
+
+-- UPDATE
+type Msg
+  = GotTopics (Result Http.Error (List TopicInfo))
+
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model =
+  case msg of
+    GotTopics result ->
+      case result of
+        Ok topics ->
+          (Success topics, Cmd.none)
+
+        Err _ ->
+          (Failure, Cmd.none)
+
+
+
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  Sub.none
+
+
+
+-- VIEW
+
+
+view : Model -> Html Msg
+view model =
+  case model of
+    Failure ->
+      text "I was unable to load your book."
+
+    Loading ->
+      text "Loading..."
+
+    Success topicInfos ->
+        tableHtml topicInfos
