@@ -105,16 +105,29 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       )
   }
 
+  implicit class IterableOps[K, V](it: Iterable[(K, V)]) {
+    def values: Iterable[V] = it.map { case (_, v) => v }
+
+    def mapValues[T](f: V => T): Iterable[T] = it.map { case (_, v) => f(v) }
+
+    def mapBoth[T, U](keyF: K => T, valueF: V => U): Iterable[(T, U)] = it.map { case (k, v) => keyF(k) -> valueF(v) }
+
+    def flatMapValues[T](f: V => Iterable[T]): Iterable[T] = it.flatMap { case (_, v) => f(v) }
+  }
+
   override def getTopicSize(
                              brokerId: BrokerId
-                           ): Task[Map[TopicPartition, TopicSize]] = {
+                           ): Task[Map[TopicPartition, TopicSize]] =
     for {
-      thing <- adminClient.describeLogDirs(brokerId.value :: Nil)
-      somethingelse: Iterable[(String, AdminClient.LogDirDescription)] = thing.values.flatten
-      replicaInfos = somethingelse.flatMap { case (topic, description) => description.replicaInfos }
-    } yield replicaInfos.map { case (partition, info) => TopicPartition.from(partition) -> TopicSize(info.size) }
+      description <- adminClient.describeLogDirs(brokerId.value :: Nil)
+    } yield description
+      .values
+      .flatten
+      .flatMapValues(_.replicaInfos)
+      .mapBoth(
+        topicPartition => TopicPartition.from(topicPartition),
+        info => TopicSize(info.size))
       .toMap
-  }
 
   private def offsets(
                        topicPartition: Seq[TopicPartition],

@@ -25,10 +25,10 @@ object KafkaTestContainer {
 
 object KafkaUtils {
   def produce(
-      topic: TopicName,
-      key: String,
-      value: String
-  ): ZIO[Producer, Throwable, Unit] =
+               topic: TopicName,
+               key: String,
+               value: String
+             ): ZIO[Producer, Throwable, Unit] =
     ZIO.serviceWithZIO[Producer](
       _.produce(
         topic.value,
@@ -58,9 +58,9 @@ object KafkaAdmin {
   }
 
   def createTopic(
-      name: TopicName,
-      numPartition: Int = 3
-  ): URIO[AdminClient, Unit] = ZIO
+                   name: TopicName,
+                   numPartition: Int = 3
+                 ): URIO[AdminClient, Unit] = ZIO
     .serviceWithZIO[AdminClient](
       _.createTopic(
         NewTopic(
@@ -80,18 +80,16 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       val topicTwo = TopicName("topicTwo")
       val topicPartitionOne = TopicPartition(topicOne, Partition(0))
       val topicPartitionTwo = TopicPartition(topicTwo, Partition(0))
-      check(Gen.stringBounded(1, 10)(Gen.char)) {aString =>
+      check(Gen.stringBounded(1, 10)(Gen.char)) { aString =>
         for {
-          _ <- ZIO.debug("starting test")
           _ <- KafkaAdmin.createTopic(name = topicOne, numPartition = 1)
           _ <- KafkaAdmin.createTopic(name = topicTwo, numPartition = 1)
           _ <- KafkaUtils.produce(topic = topicOne, key = "bar", value = aString)
-          result <- ZIO.serviceWithZIO[KafkaService](
-            _.getTopicSize(BrokerId(1))
-          )
-          _ <- ZIO.debug(result)
+          result <- ZIO.serviceWithZIO[KafkaService](_.getTopicSize(BrokerId(1)))
         } yield assertTrue(
-          result == Map(topicPartitionOne -> TopicSize(aString.getBytes.length + "bar".getBytes.length + 68), topicPartitionTwo -> TopicSize(0))
+          result == Map(
+            topicPartitionOne -> TopicSize(aString.getBytes.length + "bar".getBytes.length + 68),
+            topicPartitionTwo -> TopicSize(0))
         )
       }
     } @@ samples(1) @@ nondeterministic @@ shrinks(0)
@@ -246,13 +244,13 @@ object KafkaServiceSpec extends ZIOSpecDefault {
   )
 
   override def spec = suite("KafkaService")(
-      suite("not shared kafka")(/*listTopicsSpec, */getTopicSizeSpec).provide(
-        KafkaTestContainer.kafkaLayer,
-        KafkaServiceLive.layer,
-        AdminClient.live,
-        KafkaAdmin.adminClientSettings,
-        KafkaUtils.producerLayer,
-      ),
+    suite("not shared kafka")(listTopicsSpec, getTopicSizeSpec).provide(
+      KafkaTestContainer.kafkaLayer,
+      KafkaServiceLive.layer,
+      AdminClient.live,
+      KafkaAdmin.adminClientSettings,
+      KafkaUtils.producerLayer,
+    ),
     suite("shared kafka")(
       describeTopicsSpec,
       beginningOffsetsSpec,
