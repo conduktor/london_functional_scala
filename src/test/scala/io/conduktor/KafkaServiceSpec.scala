@@ -9,6 +9,7 @@ import zio.kafka.admin.{AdminClient, AdminClientSettings}
 import zio.kafka.producer.{Producer, ProducerSettings}
 import zio.kafka.serde.Serializer
 import zio.test.Assertion._
+import zio.test.TestAspect.{nondeterministic, samples, shrinks}
 import zio.test._
 
 object KafkaTestContainer {
@@ -73,6 +74,29 @@ object KafkaAdmin {
 }
 
 object KafkaServiceSpec extends ZIOSpecDefault {
+  private val getTopicSizeSpec = suite("getTopicSize")(
+    test("should return 1 for non empty topic partition") {
+      val topicOne = TopicName("topicOne")
+      val topicTwo = TopicName("topicTwo")
+      val topicPartitionOne = TopicPartition(topicOne, Partition(0))
+      val topicPartitionTwo = TopicPartition(topicTwo, Partition(0))
+      check(Gen.stringBounded(1, 10)(Gen.char)) {aString =>
+        for {
+          _ <- ZIO.debug("starting test")
+          _ <- KafkaAdmin.createTopic(name = topicOne, numPartition = 1)
+          _ <- KafkaAdmin.createTopic(name = topicTwo, numPartition = 1)
+          _ <- KafkaUtils.produce(topic = topicOne, key = "bar", value = aString)
+          result <- ZIO.serviceWithZIO[KafkaService](
+            _.getTopicSize(BrokerId(1))
+          )
+          _ <- ZIO.debug(result)
+        } yield assertTrue(
+          result == Map(topicPartitionOne -> TopicSize(aString.getBytes.length + "bar".getBytes.length + 68), topicPartitionTwo -> TopicSize(0))
+        )
+      }
+    } @@ samples(1) @@ nondeterministic @@ shrinks(0)
+  )
+
   private val listTopicsSpec = suite("listTopics")(
     test("should list topics when empty") {
       for {
@@ -222,16 +246,17 @@ object KafkaServiceSpec extends ZIOSpecDefault {
   )
 
   override def spec = suite("KafkaService")(
-    listTopicsSpec.provide(
-      KafkaTestContainer.kafkaLayer,
-      KafkaServiceLive.layer,
-      AdminClient.live,
-      KafkaAdmin.adminClientSettings
-    ),
+      suite("not shared kafka")(/*listTopicsSpec, */getTopicSizeSpec).provide(
+        KafkaTestContainer.kafkaLayer,
+        KafkaServiceLive.layer,
+        AdminClient.live,
+        KafkaAdmin.adminClientSettings,
+        KafkaUtils.producerLayer,
+      ),
     suite("shared kafka")(
       describeTopicsSpec,
       beginningOffsetsSpec,
-      endOffsetsSpec
+      endOffsetsSpec,
     )
       .provideShared(
         KafkaTestContainer.kafkaLayer,

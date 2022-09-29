@@ -9,18 +9,18 @@ trait KafkaService {
   def listTopicNames: Task[Seq[TopicName]]
 
   def describeTopics(
-      topicNames: Seq[TopicName]
-  ): Task[Map[TopicName, TopicDescription]]
+                      topicNames: Seq[TopicName]
+                    ): Task[Map[TopicName, TopicDescription]]
 
-  def describeLogDirs(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
+  def getTopicSize(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
   def beginningOffsets(
-      topicPartition: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]]
+                        topicPartition: Seq[TopicPartition]
+                      ): Task[Map[TopicPartition, Offset]]
 
   def endOffsets(
-      topicPartition: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]]
+                  topicPartition: Seq[TopicPartition]
+                ): Task[Map[TopicPartition, Offset]]
 }
 
 object KafkaService {
@@ -32,6 +32,7 @@ object KafkaService {
     def toZioKafka: AdminClient.TopicPartition =
       AdminClient.TopicPartition(topic.value, partition.value)
   }
+
   object TopicPartition {
     def from(topicPartition: AdminClient.TopicPartition): TopicPartition =
       TopicPartition(
@@ -49,14 +50,16 @@ object KafkaService {
   case class Spread(value: Double) extends AnyVal
 
   case class BrokerId(value: Int) extends AnyVal
+
   object BrokerId {
     def from(node: Node): BrokerId = BrokerId(node.id)
   }
 
   case class PartitionInfo(
-      leader: Option[BrokerId],
-      aliveReplicas: Seq[BrokerId]
-  )
+                            leader: Option[BrokerId],
+                            aliveReplicas: Seq[BrokerId]
+                          )
+
   object PartitionInfo {
     def from(partition: TopicPartitionInfo): PartitionInfo =
       PartitionInfo(
@@ -66,9 +69,10 @@ object KafkaService {
   }
 
   case class TopicDescription(
-      partition: Map[Partition, PartitionInfo],
-      replicationFactor: Int
-  )
+                               partition: Map[Partition, PartitionInfo],
+                               replicationFactor: Int
+                             )
+
   object TopicDescription {
     def from(topicDescription: AdminClient.TopicDescription): TopicDescription =
       TopicDescription(
@@ -90,8 +94,8 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
   override def describeTopics(
-      topicNames: Seq[TopicName]
-  ): Task[Map[TopicName, TopicDescription]] = {
+                               topicNames: Seq[TopicName]
+                             ): Task[Map[TopicName, TopicDescription]] = {
     adminClient
       .describeTopics(topicNames.map(_.value))
       .map(topicDescription =>
@@ -101,14 +105,21 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       )
   }
 
-  override def describeLogDirs(
-      brokerId: BrokerId
-  ): Task[Map[TopicPartition, TopicSize]] = ???
+  override def getTopicSize(
+                             brokerId: BrokerId
+                           ): Task[Map[TopicPartition, TopicSize]] = {
+    for {
+      thing <- adminClient.describeLogDirs(brokerId.value :: Nil)
+      somethingelse: Iterable[(String, AdminClient.LogDirDescription)] = thing.values.flatten
+      replicaInfos = somethingelse.flatMap { case (topic, description) => description.replicaInfos }
+    } yield replicaInfos.map { case (partition, info) => TopicPartition.from(partition) -> TopicSize(info.size) }
+      .toMap
+  }
 
   private def offsets(
-      topicPartition: Seq[TopicPartition],
-      offsetSpec: OffsetSpec
-  ): Task[Map[TopicPartition, Offset]] =
+                       topicPartition: Seq[TopicPartition],
+                       offsetSpec: OffsetSpec
+                     ): Task[Map[TopicPartition, Offset]] =
     adminClient
       .listOffsets(topicPartition.map { topicPartition =>
         topicPartition.toZioKafka -> offsetSpec
@@ -120,13 +131,13 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       }
 
   override def beginningOffsets(
-      topicPartition: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]] =
+                                 topicPartition: Seq[TopicPartition]
+                               ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartition, OffsetSpec.EarliestSpec)
 
   override def endOffsets(
-      topicPartition: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]] =
+                           topicPartition: Seq[TopicPartition]
+                         ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartition, OffsetSpec.LatestSpec)
 }
 
