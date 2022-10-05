@@ -18,7 +18,7 @@ lazy val root = (project in file("."))
       "com.softwaremill.sttp.tapir" %% "tapir-zio-http-server" % "1.1.1",
       "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % "1.1.1",
       "io.circe" %% "circe-core" % "0.14.3",
-      "io.circe" %% "circe-generic" % "0.14.3",
+      "io.circe" %% "circe-generic" % "0.14.3"
     ),
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
   )

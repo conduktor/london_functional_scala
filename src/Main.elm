@@ -40,7 +40,7 @@ init : () -> (Model, Cmd Msg)
 init _ =
   ( Loading
   , Http.get
-      { url = "http://localhost:8090/hello/Thibaut"
+      { url = "http://localhost:8090/all"
       , expect = Http.expectJson GotTopics topicsDecoder
       }
   )
