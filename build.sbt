@@ -5,6 +5,8 @@ ThisBuild / organizationName := "example"
 
 val zioVersion = "2.0.2"
 
+val circeVersion = "0.14.3"
+
 lazy val root = (project in file("."))
   .settings(
     name := "functional_programming_talk",
@@ -17,8 +19,9 @@ lazy val root = (project in file("."))
       "com.softwaremill.sttp.tapir" %% "tapir-zio" % "1.1.1",
       "com.softwaremill.sttp.tapir" %% "tapir-zio-http-server" % "1.1.1",
       "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % "1.1.1",
-      "io.circe" %% "circe-core" % "0.14.3",
-      "io.circe" %% "circe-generic" % "0.14.3"
+      "io.circe" %% "circe-core" % circeVersion,
+      "io.circe" %% "circe-generic" % circeVersion,
+      "io.circe" %% "circe-literal" % circeVersion % Test
     ),
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
   )

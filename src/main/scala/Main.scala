@@ -12,7 +12,6 @@ object ZioHttpServer extends ZIOAppDefault {
       _ <- Server
         .start(8090, app)
         .tapErrorCause(cause => ZIO.logErrorCause(cause))
-      _ <- ZIO.debug("started")
     } yield ()).exitCode
       .provide(
         RestEndpointsLive.layer,
