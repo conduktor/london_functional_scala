@@ -104,7 +104,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
     }
   )
 
-  private val beginningOffsetSpec = suite("/beginningOffset")(
+  private val beginningOffsetSpec = suite("/offsets/begin")(
     test("should return topic first offset") {
       val topicOne = TopicName("one")
       val topicTwo = TopicName("two")
@@ -115,7 +115,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "beginningOffsets"),
+            url = URL(!! / "offsets" / "begin"),
             method = Method.GET,
             data = HttpData.fromString(
               json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
@@ -147,7 +147,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
     }
   )
 
-  private val endOffsetSpec = suite("/endOffset")(
+  private val endOffsetSpec = suite("/offsets/end")(
     test("should return topic first offset") {
       val topicOne = TopicName("one")
       val topicTwo = TopicName("two")
@@ -158,7 +158,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "endOffsets"),
+            url = URL(!! / "offsets" / "end"),
             method = Method.GET,
             data = HttpData.fromString(
               json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
@@ -191,7 +191,13 @@ object RestEndpointSpec extends ZIOSpecDefault {
   )
 
   override def spec: Spec[TestEnvironment with Scope, Any] =
-    suite("RestEndpoint")(beginningOffsetSpec, endOffsetSpec)
+    suite("RestEndpoint")(
+      allNameSpec,
+      describeTopicSpec,
+      topicSizeSpec,
+      beginningOffsetSpec,
+      endOffsetSpec
+    )
       .provide(
         RestEndpointsLive.layer,
         KafkaTestContainer.kafkaLayer,

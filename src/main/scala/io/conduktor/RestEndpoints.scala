@@ -103,9 +103,13 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
 
   implicit val topicOffsets: Codec[TopicOffsets] = deriveCodec[TopicOffsets]
 
-  val beginningOffsets =
+  val offsetEndpoint =
     endpoint.get
-      .in("beginningOffsets")
+      .in("offsets")
+
+  val beginningOffsets =
+    offsetEndpoint
+      .in("begin")
       .in(jsonBody[Seq[TopicPartition]])
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[Seq[TopicOffsets]])
@@ -119,8 +123,8 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       }
 
   val endOffsets =
-    endpoint.get
-      .in("endOffsets")
+    offsetEndpoint
+      .in("end")
       .in(jsonBody[Seq[TopicPartition]])
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[Seq[TopicOffsets]])
