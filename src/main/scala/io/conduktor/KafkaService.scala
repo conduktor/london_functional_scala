@@ -9,18 +9,18 @@ trait KafkaService {
   def listTopicNames: Task[Seq[TopicName]]
 
   def describeTopics(
-                      topicNames: Seq[TopicName]
-                    ): Task[Map[TopicName, TopicDescription]]
+      topicNames: Seq[TopicName]
+  ): Task[Map[TopicName, TopicDescription]]
 
   def getTopicSize(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
   def beginningOffsets(
-                        topicPartition: Seq[TopicPartition]
-                      ): Task[Map[TopicPartition, Offset]]
+      topicPartitions: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]]
 
   def endOffsets(
-                  topicPartition: Seq[TopicPartition]
-                ): Task[Map[TopicPartition, Offset]]
+      topicPartitions: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]]
 }
 
 object KafkaService {
@@ -28,9 +28,9 @@ object KafkaService {
 
   case class Partition(value: Int) extends AnyVal
 
-  case class TopicPartition(topic: TopicName, partition: Partition) {
+  case class TopicPartition(topicName: TopicName, partition: Partition) {
     def toZioKafka: AdminClient.TopicPartition =
-      AdminClient.TopicPartition(topic.value, partition.value)
+      AdminClient.TopicPartition(topicName.value, partition.value)
   }
 
   object TopicPartition {
@@ -56,9 +56,9 @@ object KafkaService {
   }
 
   case class PartitionInfo(
-                            leader: Option[BrokerId],
-                            aliveReplicas: Seq[BrokerId]
-                          )
+      leader: Option[BrokerId],
+      aliveReplicas: Seq[BrokerId]
+  )
 
   object PartitionInfo {
     def from(partition: TopicPartitionInfo): PartitionInfo =
@@ -69,9 +69,9 @@ object KafkaService {
   }
 
   case class TopicDescription(
-                               partition: Map[Partition, PartitionInfo],
-                               replicationFactor: Int
-                             )
+      partition: Map[Partition, PartitionInfo],
+      replicationFactor: Int
+  )
 
   object TopicDescription {
     def from(topicDescription: AdminClient.TopicDescription): TopicDescription =
@@ -94,8 +94,8 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
   override def describeTopics(
-                               topicNames: Seq[TopicName]
-                             ): Task[Map[TopicName, TopicDescription]] = {
+      topicNames: Seq[TopicName]
+  ): Task[Map[TopicName, TopicDescription]] = {
     adminClient
       .describeTopics(topicNames.map(_.value))
       .map(topicDescription =>
@@ -110,29 +110,34 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
 
     def mapValues[T](f: V => T): Iterable[T] = it.map { case (_, v) => f(v) }
 
-    def mapBoth[T, U](keyF: K => T, valueF: V => U): Iterable[(T, U)] = it.map { case (k, v) => keyF(k) -> valueF(v) }
+    def mapBoth[T, U](keyF: K => T, valueF: V => U): Iterable[(T, U)] = it.map {
+      case (k, v) => keyF(k) -> valueF(v)
+    }
 
-    def flatMapValues[T](f: V => Iterable[T]): Iterable[T] = it.flatMap { case (_, v) => f(v) }
+    def flatMapValues[T](f: V => Iterable[T]): Iterable[T] = it.flatMap {
+      case (_, v) => f(v)
+    }
   }
 
+  //TODO: accept multiple broker id?
+  //In reality here I think we should list all broker id and directly call for everything
   override def getTopicSize(
-                             brokerId: BrokerId
-                           ): Task[Map[TopicPartition, TopicSize]] =
+      brokerId: BrokerId
+  ): Task[Map[TopicPartition, TopicSize]] =
     for {
       description <- adminClient.describeLogDirs(brokerId.value :: Nil)
-    } yield description
-      .values
-      .flatten
+    } yield description.values.flatten
       .flatMapValues(_.replicaInfos)
       .mapBoth(
         topicPartition => TopicPartition.from(topicPartition),
-        info => TopicSize(info.size))
+        info => TopicSize(info.size)
+      )
       .toMap
 
   private def offsets(
-                       topicPartition: Seq[TopicPartition],
-                       offsetSpec: OffsetSpec
-                     ): Task[Map[TopicPartition, Offset]] =
+      topicPartition: Seq[TopicPartition],
+      offsetSpec: OffsetSpec
+  ): Task[Map[TopicPartition, Offset]] =
     adminClient
       .listOffsets(topicPartition.map { topicPartition =>
         topicPartition.toZioKafka -> offsetSpec
@@ -144,14 +149,14 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       }
 
   override def beginningOffsets(
-                                 topicPartition: Seq[TopicPartition]
-                               ): Task[Map[TopicPartition, Offset]] =
-    offsets(topicPartition, OffsetSpec.EarliestSpec)
+      topicPartitions: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]] =
+    offsets(topicPartitions, OffsetSpec.EarliestSpec)
 
   override def endOffsets(
-                           topicPartition: Seq[TopicPartition]
-                         ): Task[Map[TopicPartition, Offset]] =
-    offsets(topicPartition, OffsetSpec.LatestSpec)
+      topicPartitions: Seq[TopicPartition]
+  ): Task[Map[TopicPartition, Offset]] =
+    offsets(topicPartitions, OffsetSpec.LatestSpec)
 }
 
 object KafkaServiceLive {

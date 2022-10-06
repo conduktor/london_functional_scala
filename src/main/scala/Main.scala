@@ -12,13 +12,12 @@ object ZioHttpServer extends ZIOAppDefault {
       _ <- Server
         .start(8090, app)
         .tapErrorCause(cause => ZIO.logErrorCause(cause))
-      _ <- ZIO.debug("started")
     } yield ()).exitCode
       .provide(
         RestEndpointsLive.layer,
         KafkaServiceLive.layer,
         AdminClient.live,
-        ZLayer.succeed((AdminClientSettings(List("localhost:9092"))))
+        ZLayer.succeed(AdminClientSettings(List("localhost:9092")))
       )
 
 }
