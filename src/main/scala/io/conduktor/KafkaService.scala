@@ -15,11 +15,11 @@ trait KafkaService {
   def getTopicSize(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
 
   def beginningOffsets(
-      topicPartition: Seq[TopicPartition]
+      topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]]
 
   def endOffsets(
-      topicPartition: Seq[TopicPartition]
+      topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]]
 }
 
@@ -28,9 +28,9 @@ object KafkaService {
 
   case class Partition(value: Int) extends AnyVal
 
-  case class TopicPartition(topic: TopicName, partition: Partition) {
+  case class TopicPartition(topicName: TopicName, partition: Partition) {
     def toZioKafka: AdminClient.TopicPartition =
-      AdminClient.TopicPartition(topic.value, partition.value)
+      AdminClient.TopicPartition(topicName.value, partition.value)
   }
 
   object TopicPartition {
@@ -119,6 +119,8 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
     }
   }
 
+  //TODO: accept multiple broker id?
+  //In reality here I think we should list all broker id and directly call for everything
   override def getTopicSize(
       brokerId: BrokerId
   ): Task[Map[TopicPartition, TopicSize]] =
@@ -147,14 +149,14 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       }
 
   override def beginningOffsets(
-      topicPartition: Seq[TopicPartition]
+      topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]] =
-    offsets(topicPartition, OffsetSpec.EarliestSpec)
+    offsets(topicPartitions, OffsetSpec.EarliestSpec)
 
   override def endOffsets(
-      topicPartition: Seq[TopicPartition]
+      topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]] =
-    offsets(topicPartition, OffsetSpec.LatestSpec)
+    offsets(topicPartitions, OffsetSpec.LatestSpec)
 }
 
 object KafkaServiceLive {

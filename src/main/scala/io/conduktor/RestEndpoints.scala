@@ -1,9 +1,20 @@
 package io.conduktor
 
+import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
-import io.circe.{Codec, Decoder, Encoder}
-import io.conduktor.KafkaService.TopicName
+import io.conduktor.CirceCodec._
+import io.conduktor.KafkaService.{
+  BrokerId,
+  Offset,
+  Partition,
+  PartitionInfo,
+  TopicDescription,
+  TopicName,
+  TopicPartition,
+  TopicSize
+}
 import io.conduktor.RestEndpointsLive.TopicData
+import sttp.tapir.{Endpoint, Schema}
 import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
@@ -19,7 +30,9 @@ trait RestEndpoints {
 class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
 
   case class ErrorInfo(message: String)
-  implicit val errorInfoCoded = deriveCodec[ErrorInfo]
+
+  implicit val errorInfoCodec: Codec[ErrorInfo] =
+    deriveCodec[ErrorInfo]
 
   implicit class HandlerErrorWrapper[A](task: Task[A]) {
     def handleError: IO[ErrorInfo, A] =
@@ -35,14 +48,6 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
 
   }
 
-  implicit val topicNameCodec: Codec[TopicName] = {
-    Codec
-      .from(Decoder.decodeString, Encoder.encodeString)
-      .iemap(str => Right(TopicName(str)))(_.value)
-  }
-
-  implicit val topicDataEncoder: Codec[TopicData] = deriveCodec
-
   val allTopicsName =
     endpoint.get
       .in("names")
@@ -50,7 +55,86 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       .out(jsonBody[Seq[TopicName]])
       .zServerLogic(_ => kafkaService.listTopicNames.handleError)
 
+  implicit val partitionMapSchema: Schema[Map[Partition, PartitionInfo]] =
+    Schema.schemaForMap(_.toString)
+
+  implicit val topicDescriptionMapSchema
+      : Schema[Map[TopicName, TopicDescription]] =
+    Schema.schemaForMap(_.value)
+
+  val describeTopics =
+    endpoint.get
+      .in("describe")
+      .in(query[List[TopicName]]("topicNames"))
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[Map[TopicName, TopicDescription]])
+      .zServerLogic { topicNames =>
+        kafkaService.describeTopics(topicNames).handleError
+      }
+
+  case class TopicSizes(
+      topicName: TopicName,
+      partition: Partition,
+      size: TopicSize
+  )
+
+  implicit val topicSizeCodec: Codec[TopicSizes] = deriveCodec[TopicSizes]
+
+  val sizeTopics =
+    endpoint.get
+      .in("size")
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[Seq[TopicSizes]])
+      .zServerLogic { _ =>
+        //TODO: confirm and remove BrokerId constant (see comment on getTopicSize)
+        kafkaService
+          .getTopicSize(BrokerId(1))
+          .map(_.map { case (TopicPartition(topic, partition), size) =>
+            TopicSizes(topic, partition, size)
+          }.toList)
+          .handleError
+      }
+
+  case class TopicOffsets(
+      topicName: TopicName,
+      partition: Partition,
+      offset: Offset
+  )
+
+  implicit val topicOffsets: Codec[TopicOffsets] = deriveCodec[TopicOffsets]
+
+  val beginningOffsets =
+    endpoint.get
+      .in("beginningOffsets")
+      .in(jsonBody[Seq[TopicPartition]])
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[Seq[TopicOffsets]])
+      .zServerLogic { topicPartitions =>
+        kafkaService
+          .beginningOffsets(topicPartitions)
+          .map(_.map { case (TopicPartition(topic, partition), offset) =>
+            TopicOffsets(topic, partition, offset)
+          }.toList)
+          .handleError
+      }
+
+  val endOffsets =
+    endpoint.get
+      .in("endOffsets")
+      .in(jsonBody[Seq[TopicPartition]])
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[Seq[TopicOffsets]])
+      .zServerLogic { topicPartitions =>
+        kafkaService
+          .endOffsets(topicPartitions)
+          .map(_.map { case (TopicPartition(topic, partition), offset) =>
+            TopicOffsets(topic, partition, offset)
+          }.toList)
+          .handleError
+      }
+
   //TODO: remove
+  implicit val topicDataEncoder: Codec[TopicData] = deriveCodec
   val allInOne =
     endpoint.get
       .in("all")
@@ -84,10 +168,19 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         anyOrigin = true,
         anyMethod = true,
         allowedOrigins = s => s.equals("localhost"),
-        allowedMethods = Some(Set(Method.GET, Method.POST))
+        allowedMethods = Some(Set(Method.GET, Method.POST, Method.PUT))
       )
 
-    ZioHttpInterpreter().toHttp(List(allTopicsName, allInOne)) @@ Middleware
+    ZioHttpInterpreter().toHttp(
+      List(
+        allTopicsName,
+        allInOne,
+        describeTopics,
+        sizeTopics,
+        beginningOffsets,
+        endOffsets
+      )
+    ) @@ Middleware
       .cors(config)
   }
 

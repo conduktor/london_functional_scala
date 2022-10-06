@@ -17,7 +17,7 @@ object ZioHttpServer extends ZIOAppDefault {
         RestEndpointsLive.layer,
         KafkaServiceLive.layer,
         AdminClient.live,
-        ZLayer.succeed((AdminClientSettings(List("localhost:9092"))))
+        ZLayer.succeed(AdminClientSettings(List("localhost:9092")))
       )
 
 }
