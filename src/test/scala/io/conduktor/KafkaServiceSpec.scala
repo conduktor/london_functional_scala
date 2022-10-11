@@ -13,8 +13,6 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     test("should return 1 for non empty topic partition") {
       val topicOne = TopicName("topicOne")
       val topicTwo = TopicName("topicTwo")
-      val topicPartitionOne = TopicPartition(topicOne, Partition(0))
-      val topicPartitionTwo = TopicPartition(topicTwo, Partition(0))
       check(Gen.stringBounded(1, 10)(Gen.char)) { aString =>
         for {
           _ <- KafkaUtils.createTopic(name = topicOne, numPartition = 1)
@@ -29,10 +27,10 @@ object KafkaServiceSpec extends ZIOSpecDefault {
           )
         } yield assertTrue(
           result == Map(
-            topicPartitionOne -> TopicSize(
+            topicOne -> TopicSize(
               aString.getBytes.length + "bar".getBytes.length + 68
             ),
-            topicPartitionTwo -> TopicSize(0)
+            topicTwo -> TopicSize(0)
           )
         )
       }

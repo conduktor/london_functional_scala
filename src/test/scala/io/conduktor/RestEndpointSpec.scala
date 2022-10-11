@@ -99,7 +99,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         responseBody <- response.data.toJson
       } yield assertTrue(
         responseBody ==
-          json"""[{"topicName": "one", "partition": 0, "size": 70}, {"topicName": "two", "partition": 0, "size": 0}]"""
+          json"""{"one":  70, "two": 0}"""
       )
     }
   )
@@ -186,7 +186,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         responseBody ==
           json"""[{"topicName": "one", "partition": 0, "offset": 1}, {"topicName": "two", "partition": 0, "offset": 0},
           {"topicName": "two", "partition": 1, "offset": 0}]"""
-      )
+      ) //FIXME: should not return partitions
     }
   )
 
