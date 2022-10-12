@@ -11,6 +11,7 @@ import zio.{Scope, Task, ZIO}
 
 import java.nio.charset.Charset
 import io.circe.parser.parse
+import zhttp.http.Status.BadRequest
 
 object RestEndpointSpec extends ZIOSpecDefault {
   implicit class HttpDataExtension(httpData: HttpData) {
@@ -147,8 +148,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
     }
   )
 
-  private val recordCountSpec = suite("/recordCount")(
-    test("should return topic record count") {
+  private val recordCountSpec = suite("/topics/{topic}/records")(
+    test("should return topic record count for fields=count query param") {
       val topicName = TopicName("one")
       for {
         _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
@@ -157,13 +158,44 @@ object RestEndpointSpec extends ZIOSpecDefault {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "records")
-              .setQueryParams(Map("topicName" -> List(topicName.value))),
-            method = Method.HEAD
+            url = URL(!! / "topics" / topicName.value / "records")
+              .setQueryParams("fields=count"),
+            method = Method.GET
           )
         )
         responseBody <- response.data.toJson
       } yield assertTrue(responseBody == json"2")
+    },
+    test("should fail when retrieving records") {
+      val topicName = TopicName("one")
+      for {
+        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "records"),
+            method = Method.GET
+          )
+        )
+      } yield assertTrue(response.status == BadRequest)
+    },
+    test("should fail when retrieving anything but count field") {
+      val topicName = TopicName("one")
+      for {
+        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "records")
+              .setQueryParams("fields=payload"),
+            method = Method.GET
+          )
+        )
+      } yield assertTrue(response.status == BadRequest)
     }
   )
 

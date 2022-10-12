@@ -3,18 +3,8 @@ package io.conduktor
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import io.conduktor.CirceCodec._
-import io.conduktor.KafkaService.{
-  BrokerId,
-  Offset,
-  Partition,
-  PartitionInfo,
-  RecordCount,
-  TopicDescription,
-  TopicName,
-  TopicPartition,
-  TopicSize
-}
-import sttp.tapir.{Endpoint, Schema}
+import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, RecordCount, TopicDescription, TopicName, TopicPartition, TopicSize}
+import sttp.tapir.{Endpoint, Schema, Validator}
 import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
@@ -76,12 +66,15 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       }
 
   val recordCount =
-    endpoint.head
+    endpoint.get
+      .in("topics")
+      .in(path[TopicName]("topicName"))
       .in("records")
-      .in(query[TopicName]("topicName"))
+      .in(query[String]("fields")
+        .validate(Validator.enumeration("count" :: Nil)))
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[RecordCount])
-      .zServerLogic { topicName =>
+      .zServerLogic { case (topicName, fields) =>
         kafkaService.recordCount(topicName).handleError
       }
 
