@@ -76,8 +76,8 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       }
 
   val recordCount =
-    endpoint.get
-      .in("recordCount")
+    endpoint.head
+      .in("records")
       .in(query[TopicName]("topicName"))
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[RecordCount])

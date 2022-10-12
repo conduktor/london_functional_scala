@@ -157,9 +157,9 @@ object RestEndpointSpec extends ZIOSpecDefault {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "recordCount")
+            url = URL(!! / "records")
               .setQueryParams(Map("topicName" -> List(topicName.value))),
-            method = Method.GET
+            method = Method.HEAD
           )
         )
         responseBody <- response.data.toJson
