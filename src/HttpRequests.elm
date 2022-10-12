@@ -2,19 +2,19 @@ module HttpRequests exposing (listNames, loadSizes, Msg(..))
 
 import Dict exposing (Dict)
 import Http
-import Table exposing (..)
+import Model exposing (..)
 
 import Json.Decode as Decode
 import Json.Encode as Encode
 
 
-topicNameDecoder = Decode.map mkTopicName Decode.string
+topicNameDecoder = Decode.map TopicName Decode.string
 topicNamesDecoder = Decode.list topicNameDecoder
-topicNameEncoder name = Encode.string (unwrapTopicName name)
+
+topicNameEncoder (TopicName name) = Encode.string name
 topicNamesEncoder names = Encode.list topicNameEncoder names
 
-topicSizeDecoder = Decode.map mkTopicSize Decode.int
-
+topicSizeDecoder = Decode.map TopicSize Decode.int
 
 topicSizeResponseDecoder : Decode.Decoder (Dict String TopicSize)
 topicSizeResponseDecoder = Decode.dict topicSizeDecoder

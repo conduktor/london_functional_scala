@@ -4,6 +4,7 @@ import Browser
 import Html exposing (Html, text)
 import HttpRequests exposing (listNames, loadSizes, Msg, Msg(..))
 import Table exposing (..)
+import Model exposing (..)
 
 main =
   Browser.element
