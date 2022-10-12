@@ -8,12 +8,12 @@ import io.conduktor.KafkaService.{
   Offset,
   Partition,
   PartitionInfo,
+  RecordCount,
   TopicDescription,
   TopicName,
   TopicPartition,
   TopicSize
 }
-import io.conduktor.RestEndpointsLive.TopicData
 import sttp.tapir.{Endpoint, Schema}
 import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
@@ -75,6 +75,16 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         kafkaService.describeTopics(topicNames).handleError
       }
 
+  val recordCount =
+    endpoint.get
+      .in("recordCount")
+      .in(query[TopicName]("topicName"))
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[RecordCount])
+      .zServerLogic { topicName =>
+        kafkaService.recordCount(topicName).handleError
+      }
+
   val sizeTopics =
     endpoint.get
       .in("size")
@@ -126,35 +136,6 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
           .handleError
       }
 
-  //TODO: remove
-  implicit val topicDataEncoder: Codec[TopicData] = deriveCodec
-  val allInOne =
-    endpoint.get
-      .in("all")
-      .out(jsonBody[Seq[TopicData]])
-      .zServerLogic(_ =>
-        ZIO.succeed(
-          List(
-            TopicData(
-              name = "yo",
-              sizeInByte = "42",
-              partitions = "3",
-              recordCount = "43",
-              spread = "0.8",
-              replicationFactor = "2"
-            ),
-            TopicData(
-              name = "ya",
-              sizeInByte = "34",
-              partitions = "2",
-              recordCount = "32",
-              spread = "0.9",
-              replicationFactor = "3"
-            )
-          )
-        )
-      )
-
   val app: HttpApp[Any, Throwable] = {
     val config: CorsConfig =
       CorsConfig(
@@ -167,11 +148,11 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
     ZioHttpInterpreter().toHttp(
       List(
         allTopicsName,
-        allInOne,
         describeTopics,
         sizeTopics,
         beginningOffsets,
-        endOffsets
+        endOffsets,
+        recordCount
       )
     ) @@ Middleware
       .cors(config)
@@ -180,15 +161,6 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
 }
 
 object RestEndpointsLive {
-  case class TopicData(
-      name: String,
-      sizeInByte: String,
-      partitions: String,
-      recordCount: String,
-      spread: String,
-      replicationFactor: String
-  )
-
   val layer: ZLayer[KafkaService, Nothing, RestEndpoints] = ZLayer {
     for {
       kafkaService <- ZIO.service[KafkaService]

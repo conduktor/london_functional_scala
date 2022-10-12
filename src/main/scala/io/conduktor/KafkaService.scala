@@ -21,6 +21,11 @@ trait KafkaService {
   def endOffsets(
       topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]]
+
+  def getNumOfBroker: Task[NumOfBroker]
+
+  def recordCount(topicName: TopicName): Task[RecordCount]
+
 }
 
 object KafkaService {
@@ -52,6 +57,8 @@ object KafkaService {
   case class Spread(value: Double) extends AnyVal
 
   case class BrokerId(value: Int) extends AnyVal
+
+  case class NumOfBroker(value: Int) extends AnyVal
 
   object BrokerId {
     def from(node: Node): BrokerId = BrokerId(node.id)
@@ -158,6 +165,35 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartitions, OffsetSpec.LatestSpec)
+
+  override def getNumOfBroker: Task[NumOfBroker] =
+    adminClient.describeClusterNodes().map { nodes =>
+      NumOfBroker(nodes.length)
+    }
+
+  override def recordCount(
+      topicName: TopicName
+  ): Task[RecordCount] =
+    describeTopics(List(topicName))
+      .map(_.values.headOption)
+      .flatMap(
+        _.map { details =>
+          val topicPartitions =
+            details.partition.keySet.map(TopicPartition(topicName, _)).toSeq
+          for {
+            beginningOffsets <- beginningOffsets(topicPartitions)
+            endOffsets <- endOffsets(topicPartitions)
+          } yield RecordCount(
+            endOffsets.values
+              .map(_.value)
+              .sum - beginningOffsets.values.map(_.value).sum
+          )
+        }.getOrElse(
+          ZIO.fail(
+            new RuntimeException("Should never happen: no partition for topic")
+          )
+        )
+      )
 }
 
 object KafkaServiceLive {

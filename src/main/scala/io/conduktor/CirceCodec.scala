@@ -7,6 +7,7 @@ import io.conduktor.KafkaService.{
   Offset,
   Partition,
   PartitionInfo,
+  RecordCount,
   TopicDescription,
   TopicName,
   TopicPartition,
@@ -29,6 +30,10 @@ object CirceCodec {
   implicit val brokerIdCodec: Codec[BrokerId] = Codec
     .from(Decoder.decodeInt, Encoder.encodeInt)
     .iemap(anInt => Right(BrokerId(anInt)))(_.value)
+
+  implicit val recordCountCodec: Codec[RecordCount] = Codec
+    .from(Decoder.decodeLong, Encoder.encodeLong)
+    .iemap(anLong => Right(RecordCount(anLong)))(_.value)
 
   implicit val topicNameCodec: Codec[TopicName] =
     Codec

@@ -147,6 +147,26 @@ object RestEndpointSpec extends ZIOSpecDefault {
     }
   )
 
+  private val recordCountSpec = suite("/recordCount")(
+    test("should return topic record count") {
+      val topicName = TopicName("one")
+      for {
+        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "recordCount")
+              .setQueryParams(Map("topicName" -> List(topicName.value))),
+            method = Method.GET
+          )
+        )
+        responseBody <- response.data.toJson
+      } yield assertTrue(responseBody == json"2")
+    }
+  )
+
   private val endOffsetSpec = suite("/offsets/end")(
     test("should return topic first offset") {
       val topicOne = TopicName("one")
@@ -196,7 +216,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
       describeTopicSpec,
       topicSizeSpec,
       beginningOffsetSpec,
-      endOffsetSpec
+      endOffsetSpec,
+      recordCountSpec
     )
       .provide(
         RestEndpointsLive.layer,

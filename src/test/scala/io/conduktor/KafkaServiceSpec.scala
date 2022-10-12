@@ -185,8 +185,62 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     }
   )
 
+  private val recordCountSpec = suite("recordCount")(
+    test("should return none for non existing topic") {
+      ZIO
+        .serviceWithZIO[KafkaService](
+          _.recordCount(TopicName("i_dont_exist")).either
+        )
+        .map { result => assert(result)(isLeft(anything)) }
+    },
+    test("should return zero for an empty topic") {
+      val topicName = TopicName("recordCountTest4")
+      for {
+        _ <- KafkaUtils.createTopic(name = topicName, numPartition = 1)
+        result <- ZIO.serviceWithZIO[KafkaService](
+          _.recordCount(topicName)
+        )
+      } yield assertTrue(
+        result == RecordCount(0)
+      )
+    },
+    test("should return the num of record for a topic") {
+      val topicName = TopicName("recordCountTest2")
+      for {
+        _ <- KafkaUtils.createTopic(name = topicName, numPartition = 3)
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        _ <- KafkaUtils.produce(topic = topicName, key = "bar", value = "foo")
+        result <- ZIO.serviceWithZIO[KafkaService](
+          _.recordCount(topicName)
+        )
+      } yield assertTrue(
+        result == (RecordCount(6))
+      )
+    }
+  )
+
+  private val numOfBrokerSpec = suite("numOfBroker")(
+    test("should return one with kafka having one node") {
+      ZIO
+        .serviceWithZIO[KafkaService](
+          _.getNumOfBroker
+        )
+        .map { numOfBroker =>
+          assertTrue(numOfBroker == NumOfBroker(1))
+        }
+    }
+  )
+
   override def spec = suite("KafkaService")(
-    suite("not shared kafka")(listTopicsSpec, getTopicSizeSpec).provide(
+    suite("not shared kafka")(
+      listTopicsSpec,
+      getTopicSizeSpec,
+      numOfBrokerSpec
+    ).provide(
       KafkaTestContainer.kafkaLayer,
       KafkaServiceLive.layer,
       AdminClient.live,
@@ -194,9 +248,11 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       KafkaUtils.producerLayer
     ),
     suite("shared kafka")(
+      recordCountSpec,
       describeTopicsSpec,
       beginningOffsetsSpec,
-      endOffsetsSpec
+      endOffsetsSpec,
+      numOfBrokerSpec
     )
       .provideShared(
         KafkaTestContainer.kafkaLayer,
