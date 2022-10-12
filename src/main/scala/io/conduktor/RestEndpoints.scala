@@ -62,7 +62,8 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       : Schema[Map[TopicName, TopicDescription]] =
     Schema.schemaForMap(_.value)
 
-  implicit val topicSizeMapSchema: Schema[Map[TopicName, TopicSize]] = Schema.schemaForMap(_.value)
+  implicit val topicSizeMapSchema: Schema[Map[TopicName, TopicSize]] =
+    Schema.schemaForMap(_.value)
 
   val describeTopics =
     endpoint.get
@@ -80,10 +81,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[Map[TopicName, TopicSize]])
       .zServerLogic { _ =>
-        //TODO: confirm and remove BrokerId constant (see comment on getTopicSize)
-        kafkaService
-          .getTopicSize(BrokerId(0))
-          .handleError
+        kafkaService.getTopicSize.handleError
       }
 
   case class TopicOffsets(

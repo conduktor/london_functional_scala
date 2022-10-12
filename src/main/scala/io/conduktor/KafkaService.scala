@@ -12,7 +12,7 @@ trait KafkaService {
       topicNames: Seq[TopicName]
   ): Task[Map[TopicName, TopicDescription]]
 
-  def getTopicSize(brokerId: BrokerId): Task[Map[TopicName, TopicSize]]
+  def getTopicSize: Task[Map[TopicName, TopicSize]]
 
   def beginningOffsets(
       topicPartitions: Seq[TopicPartition]
@@ -121,20 +121,19 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
     }
   }
 
-  //TODO: accept multiple broker id?
-  //In reality here I think we should list all broker id and directly call for everything
-  override def getTopicSize(
-      brokerId: BrokerId
-  ): Task[Map[TopicName, TopicSize]] =
+  override def getTopicSize: Task[Map[TopicName, TopicSize]] =
     for {
-      description <- adminClient.describeLogDirs(brokerId.value :: Nil)
+      brokerIds <- adminClient.describeClusterNodes().map(_.map(_.id))
+      description <- adminClient.describeLogDirs(brokerIds)
     } yield description.values.flatten
       .flatMapValues(_.replicaInfos)
       .mapBoth(
         topicPartition => TopicPartition.from(topicPartition),
         info => TopicSize(info.size)
       )
-      .groupMapReduce { case (topicPartition, _) => topicPartition.topicName} { case (_, size) => size} { _ + _ }
+      .groupMapReduce { case (topicPartition, _) => topicPartition.topicName } {
+        case (_, size) => size
+      } { _ + _ }
 
   private def offsets(
       topicPartition: Seq[TopicPartition],

@@ -23,7 +23,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
             value = aString
           )
           result <- ZIO.serviceWithZIO[KafkaService](
-            _.getTopicSize(BrokerId(1))
+            _.getTopicSize
           )
         } yield assertTrue(
           result == Map(

@@ -186,7 +186,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         responseBody ==
           json"""[{"topicName": "one", "partition": 0, "offset": 1}, {"topicName": "two", "partition": 0, "offset": 0},
           {"topicName": "two", "partition": 1, "offset": 0}]"""
-      ) //FIXME: should not return partitions
+      )
     }
   )
 
