@@ -12,7 +12,7 @@ trait KafkaService {
       topicNames: Seq[TopicName]
   ): Task[Map[TopicName, TopicDescription]]
 
-  def getTopicSize(brokerId: BrokerId): Task[Map[TopicPartition, TopicSize]]
+  def getTopicSize(brokerId: BrokerId): Task[Map[TopicName, TopicSize]]
 
   def beginningOffsets(
       topicPartitions: Seq[TopicPartition]
@@ -45,7 +45,9 @@ object KafkaService {
 
   case class Offsets(beginOffset: Offset, endOffset: Offset)
 
-  case class TopicSize(value: Long) extends AnyVal
+  case class TopicSize(value: Long) extends AnyVal {
+    def +(other: TopicSize): TopicSize = TopicSize(value + other.value)
+  }
 
   case class Spread(value: Double) extends AnyVal
 
@@ -123,7 +125,7 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
   //In reality here I think we should list all broker id and directly call for everything
   override def getTopicSize(
       brokerId: BrokerId
-  ): Task[Map[TopicPartition, TopicSize]] =
+  ): Task[Map[TopicName, TopicSize]] =
     for {
       description <- adminClient.describeLogDirs(brokerId.value :: Nil)
     } yield description.values.flatten
@@ -132,7 +134,7 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
         topicPartition => TopicPartition.from(topicPartition),
         info => TopicSize(info.size)
       )
-      .toMap
+      .groupMapReduce { case (topicPartition, _) => topicPartition.topicName} { case (_, size) => size} { _ + _ }
 
   private def offsets(
       topicPartition: Seq[TopicPartition],

@@ -1,9 +1,8 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, pre, text, div)
-import Http
-import Json.Decode as Decode
+import Html exposing (Html, text)
+import HttpRequests exposing (listNames, loadSizes, Msg, Msg(..))
 import Table exposing (..)
 
 main =
@@ -14,79 +13,46 @@ main =
     , view = view
     }
 
-
-
 -- MODEL
-
-
 type Model
   = Failure
-  | Loading
-  | HasNames (List TopicName)
-  | Success (List TopicInfo)
-
-topicDecoder : Decode.Decoder TopicInfo
-topicDecoder =
-    Decode.map6 mkTopicInfo
-        (Decode.field "name" Decode.string)
-        (Decode.field "sizeInByte" Decode.string)
-        (Decode.field "partitions" Decode.string)
-        (Decode.field "recordCount" Decode.string)
-        (Decode.field "spread" Decode.string)
-        (Decode.field "replicationFactor" Decode.string)
-
-topicsDecoder = Decode.list topicDecoder
-
-
-topicNameDecoder = Decode.map mkTopicName Decode.string
-topicNamesDecoder = Decode.list topicNameDecoder
+  | LoadingNames
+  | Started TopicsInfo
 
 init : () -> (Model, Cmd Msg)
-init _ =
-  ( Loading
-  , Http.get
-      { url = "http://localhost:8090/names"
-      , expect = Http.expectJson GotNames topicNamesDecoder
-      }
-  )
-
+init _ = (LoadingNames, Cmd.map HttpMessage listNames)
 
 
 -- UPDATE
-type Msg
-  = GotTopics (Result Http.Error (List TopicInfo)) |
-  GotNames (Result Http.Error (List TopicName))
-
+type Msg = HttpMessage HttpRequests.Msg
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
-  case msg of
-    GotTopics result ->
-      case result of
-        Ok topics ->
-          (Success topics, Cmd.none)
-
-        Err _ ->
-          (Failure, Cmd.none)
-    GotNames result ->
+  case (msg, model) of
+    (HttpMessage (GotNames result), LoadingNames) ->
       case result of
         Ok topicNames ->
           let _ = Debug.log "topic names " topicNames in
-            (HasNames topicNames, Cmd.none)
+            (Started (topicNamesToTopicInfos topicNames), Cmd.map HttpMessage (loadSizes topicNames))
+
+        Err _ ->
+          (Failure, Cmd.none)
+    (HttpMessage (GotSizes result), Started topicInfos) ->
+      case result of
+        Ok topicSizes ->
+          let _ = Debug.log "topic sizes " topicSizes in
+            (Started (applyTopicSizes topicInfos topicSizes), Cmd.none)
 
         Err _ ->
           (Failure, Cmd.none)
 
+    (HttpMessage _, _) ->
+      (Failure, Cmd.none) -- FIXME
 
 
 -- SUBSCRIPTIONS
-
-
 subscriptions : Model -> Sub Msg
-subscriptions model =
-  Sub.none
-
-
+subscriptions model = Sub.none
 
 -- VIEW
 view : Model -> Html Msg
@@ -95,11 +61,8 @@ view model =
     Failure ->
       text "I was unable to load your book."
 
-    Loading ->
+    LoadingNames ->
       text "Loading..."
 
-    HasNames topicNames ->
-        tableHtml (topicNamesToTopicInfos topicNames)
-
-    Success topicInfos ->
+    Started topicInfos ->
         tableHtml topicInfos
