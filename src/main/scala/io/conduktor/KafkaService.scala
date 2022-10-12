@@ -22,7 +22,7 @@ trait KafkaService {
       topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]]
 
-  def getNumOfBroker: Task[NumOfBroker]
+  def brokerCount: Task[BrokerCount]
 
   def recordCount(topicName: TopicName): Task[RecordCount]
 
@@ -58,7 +58,7 @@ object KafkaService {
 
   case class BrokerId(value: Int) extends AnyVal
 
-  case class NumOfBroker(value: Int) extends AnyVal
+  case class BrokerCount(value: Int) extends AnyVal
 
   object BrokerId {
     def from(node: Node): BrokerId = BrokerId(node.id)
@@ -166,9 +166,9 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
   ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartitions, OffsetSpec.LatestSpec)
 
-  override def getNumOfBroker: Task[NumOfBroker] =
+  override def brokerCount: Task[BrokerCount] =
     adminClient.describeClusterNodes().map { nodes =>
-      NumOfBroker(nodes.length)
+      BrokerCount(nodes.length)
     }
 
   override def recordCount(

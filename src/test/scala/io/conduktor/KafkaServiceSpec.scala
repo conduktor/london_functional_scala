@@ -223,14 +223,14 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     }
   )
 
-  private val numOfBrokerSpec = suite("numOfBroker")(
+  private val brokerCountSpec = suite("brokerCount")(
     test("should return one with kafka having one node") {
       ZIO
         .serviceWithZIO[KafkaService](
-          _.getNumOfBroker
+          _.brokerCount
         )
-        .map { numOfBroker =>
-          assertTrue(numOfBroker == NumOfBroker(1))
+        .map { brokerCount =>
+          assertTrue(brokerCount == BrokerCount(1))
         }
     }
   )
@@ -239,7 +239,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     suite("not shared kafka")(
       listTopicsSpec,
       getTopicSizeSpec,
-      numOfBrokerSpec
+      brokerCountSpec
     ).provide(
       KafkaTestContainer.kafkaLayer,
       KafkaServiceLive.layer,
@@ -252,7 +252,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       describeTopicsSpec,
       beginningOffsetsSpec,
       endOffsetsSpec,
-      numOfBrokerSpec
+      brokerCountSpec
     )
       .provideShared(
         KafkaTestContainer.kafkaLayer,
