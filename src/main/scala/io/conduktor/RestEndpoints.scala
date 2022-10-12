@@ -3,18 +3,8 @@ package io.conduktor
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import io.conduktor.CirceCodec._
-import io.conduktor.KafkaService.{
-  BrokerId,
-  Offset,
-  Partition,
-  PartitionInfo,
-  TopicDescription,
-  TopicName,
-  TopicPartition,
-  TopicSize
-}
-import io.conduktor.RestEndpointsLive.TopicData
-import sttp.tapir.{Endpoint, Schema}
+import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, RecordCount, TopicDescription, TopicName, TopicPartition, TopicSize}
+import sttp.tapir.{Endpoint, Schema, Validator}
 import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
@@ -62,7 +52,8 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       : Schema[Map[TopicName, TopicDescription]] =
     Schema.schemaForMap(_.value)
 
-  implicit val topicSizeMapSchema: Schema[Map[TopicName, TopicSize]] = Schema.schemaForMap(_.value)
+  implicit val topicSizeMapSchema: Schema[Map[TopicName, TopicSize]] =
+    Schema.schemaForMap(_.value)
 
   val describeTopics =
     endpoint.get
@@ -74,16 +65,26 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         kafkaService.describeTopics(topicNames).handleError
       }
 
+  val recordCount =
+    endpoint.get
+      .in("topics")
+      .in(path[TopicName]("topicName"))
+      .in("records")
+      .in(query[String]("fields")
+        .validate(Validator.enumeration("count" :: Nil)))
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[RecordCount])
+      .zServerLogic { case (topicName, fields) =>
+        kafkaService.recordCount(topicName).handleError
+      }
+
   val sizeTopics =
     endpoint.get
       .in("size")
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[Map[TopicName, TopicSize]])
       .zServerLogic { _ =>
-        //TODO: confirm and remove BrokerId constant (see comment on getTopicSize)
-        kafkaService
-          .getTopicSize(BrokerId(0))
-          .handleError
+        kafkaService.getTopicSize.handleError
       }
 
   case class TopicOffsets(
@@ -128,35 +129,6 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
           .handleError
       }
 
-  //TODO: remove
-  implicit val topicDataEncoder: Codec[TopicData] = deriveCodec
-  val allInOne =
-    endpoint.get
-      .in("all")
-      .out(jsonBody[Seq[TopicData]])
-      .zServerLogic(_ =>
-        ZIO.succeed(
-          List(
-            TopicData(
-              name = "yo",
-              sizeInByte = "42",
-              partitions = "3",
-              recordCount = "43",
-              spread = "0.8",
-              replicationFactor = "2"
-            ),
-            TopicData(
-              name = "ya",
-              sizeInByte = "34",
-              partitions = "2",
-              recordCount = "32",
-              spread = "0.9",
-              replicationFactor = "3"
-            )
-          )
-        )
-      )
-
   val app: HttpApp[Any, Throwable] = {
     val config: CorsConfig =
       CorsConfig(
@@ -169,11 +141,11 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
     ZioHttpInterpreter().toHttp(
       List(
         allTopicsName,
-        allInOne,
         describeTopics,
         sizeTopics,
         beginningOffsets,
-        endOffsets
+        endOffsets,
+        recordCount
       )
     ) @@ Middleware
       .cors(config)
@@ -182,15 +154,6 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
 }
 
 object RestEndpointsLive {
-  case class TopicData(
-      name: String,
-      sizeInByte: String,
-      partitions: String,
-      recordCount: String,
-      spread: String,
-      replicationFactor: String
-  )
-
   val layer: ZLayer[KafkaService, Nothing, RestEndpoints] = ZLayer {
     for {
       kafkaService <- ZIO.service[KafkaService]

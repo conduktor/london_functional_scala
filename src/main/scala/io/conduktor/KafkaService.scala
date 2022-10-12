@@ -12,7 +12,7 @@ trait KafkaService {
       topicNames: Seq[TopicName]
   ): Task[Map[TopicName, TopicDescription]]
 
-  def getTopicSize(brokerId: BrokerId): Task[Map[TopicName, TopicSize]]
+  def getTopicSize: Task[Map[TopicName, TopicSize]]
 
   def beginningOffsets(
       topicPartitions: Seq[TopicPartition]
@@ -21,6 +21,11 @@ trait KafkaService {
   def endOffsets(
       topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]]
+
+  def brokerCount: Task[BrokerCount]
+
+  def recordCount(topicName: TopicName): Task[RecordCount]
+
 }
 
 object KafkaService {
@@ -52,6 +57,8 @@ object KafkaService {
   case class Spread(value: Double) extends AnyVal
 
   case class BrokerId(value: Int) extends AnyVal
+
+  case class BrokerCount(value: Int) extends AnyVal
 
   object BrokerId {
     def from(node: Node): BrokerId = BrokerId(node.id)
@@ -121,20 +128,19 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
     }
   }
 
-  //TODO: accept multiple broker id?
-  //In reality here I think we should list all broker id and directly call for everything
-  override def getTopicSize(
-      brokerId: BrokerId
-  ): Task[Map[TopicName, TopicSize]] =
+  override def getTopicSize: Task[Map[TopicName, TopicSize]] =
     for {
-      description <- adminClient.describeLogDirs(brokerId.value :: Nil)
+      brokerIds <- adminClient.describeClusterNodes().map(_.map(_.id))
+      description <- adminClient.describeLogDirs(brokerIds)
     } yield description.values.flatten
       .flatMapValues(_.replicaInfos)
       .mapBoth(
         topicPartition => TopicPartition.from(topicPartition),
         info => TopicSize(info.size)
       )
-      .groupMapReduce { case (topicPartition, _) => topicPartition.topicName} { case (_, size) => size} { _ + _ }
+      .groupMapReduce { case (topicPartition, _) => topicPartition.topicName } {
+        case (_, size) => size
+      } { _ + _ }
 
   private def offsets(
       topicPartition: Seq[TopicPartition],
@@ -159,6 +165,35 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       topicPartitions: Seq[TopicPartition]
   ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartitions, OffsetSpec.LatestSpec)
+
+  override def brokerCount: Task[BrokerCount] =
+    adminClient.describeClusterNodes().map { nodes =>
+      BrokerCount(nodes.length)
+    }
+
+  override def recordCount(
+      topicName: TopicName
+  ): Task[RecordCount] =
+    describeTopics(List(topicName))
+      .map(_.values.headOption)
+      .flatMap(
+        _.map { details =>
+          val topicPartitions =
+            details.partition.keySet.map(TopicPartition(topicName, _)).toSeq
+          for {
+            beginningOffsets <- beginningOffsets(topicPartitions)
+            endOffsets <- endOffsets(topicPartitions)
+          } yield RecordCount(
+            endOffsets.values
+              .map(_.value)
+              .sum - beginningOffsets.values.map(_.value).sum
+          )
+        }.getOrElse(
+          ZIO.fail(
+            new RuntimeException("Should never happen: no partition for topic")
+          )
+        )
+      )
 }
 
 object KafkaServiceLive {
