@@ -33,26 +33,22 @@ type alias TopicsInfo = List TopicInfo
 
 applyTopicSize: Dict String TopicSize -> TopicInfo -> TopicInfo
 applyTopicSize sizes previous =
-    let (TopicName name) = previous.name
-    in let maybeSize = Dict.get name sizes
+    let
+      (TopicName name) = previous.name
+      maybeSize = Dict.get name sizes
     in case maybeSize of
               Just size -> { previous | sizeInByte = Loaded size }
               Nothing -> previous
 
-applyUpdateToTopicsInfo: TopicName -> (TopicInfo -> TopicInfo) -> TopicsInfo -> TopicsInfo
-applyUpdateToTopicsInfo name update infos = List.map (\topicInfo -> if (topicInfo.name == name) then update topicInfo else topicInfo) infos
+applyUpdateToTopicsInfo: (TopicInfo -> TopicInfo) -> TopicName -> TopicsInfo -> TopicsInfo
+applyUpdateToTopicsInfo update name = List.map (\topicInfo -> if (topicInfo.name == name) then update topicInfo else topicInfo)
 
-applyRecordCount: TopicName -> RecordCount -> TopicsInfo -> TopicsInfo
-applyRecordCount name count infos =
-    let updatedInfo previous = { previous | recordCount = Loaded count }
-    in applyUpdateToTopicsInfo name updatedInfo infos
+applyRecordCount: RecordCount -> TopicName -> TopicsInfo -> TopicsInfo
+applyRecordCount count = applyUpdateToTopicsInfo (\previous -> { previous | recordCount = Loaded count })
 
-applyPartitionCount: TopicName -> PartitionCount -> TopicsInfo -> TopicsInfo
-applyPartitionCount name count infos =
-    let updatedInfo previous = { previous | partitionCount = Loaded count }
-    in applyUpdateToTopicsInfo name updatedInfo infos
+applyPartitionCount: PartitionCount -> TopicName -> TopicsInfo -> TopicsInfo
+applyPartitionCount count = applyUpdateToTopicsInfo (\previous -> { previous | partitionCount = Loaded count })
 
-
-applyTopicSizes: TopicsInfo -> Dict String TopicSize -> TopicsInfo
-applyTopicSizes previous sizes = List.map (applyTopicSize sizes) previous
+applyTopicSizes: Dict String TopicSize -> TopicsInfo -> TopicsInfo
+applyTopicSizes sizes = List.map (applyTopicSize sizes)
 

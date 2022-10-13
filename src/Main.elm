@@ -53,7 +53,7 @@ update msg model =
       case result of
         Ok topicSizes ->
           let _ = Debug.log "topic sizes " topicSizes in
-            (Started (applyTopicSizes topicInfos topicSizes), Cmd.none)
+            (Started (applyTopicSizes topicSizes topicInfos), Cmd.none)
 
         Err _ ->
           (Failure, Cmd.none)
@@ -64,7 +64,7 @@ update msg model =
     (HttpMessage (GotRecordCount result), Started topicInfos) ->
       case result of
         Ok (topicName, recordCount) ->
-          (Started (applyRecordCount topicName recordCount topicInfos), Cmd.none)
+          (Started (applyRecordCount recordCount topicName topicInfos), Cmd.none)
 
         Err _ ->
           (Failure, Cmd.none)
@@ -75,7 +75,7 @@ update msg model =
     (HttpMessage (GotPartitionCount result), Started topicInfos) ->
       case result of
         Ok (topicName, partitionCount) ->
-          (Started (applyPartitionCount topicName partitionCount topicInfos), Cmd.none)
+          (Started (applyPartitionCount partitionCount topicName topicInfos), Cmd.none)
 
         Err _ ->
           (Failure, Cmd.none)
