@@ -2,6 +2,7 @@ module Model exposing (..)
 
 import Dict exposing (Dict)
 
+type TopicName = TopicName String
 type TopicSize = TopicSize Int
 type RecordCount = RecordCount Int
 type PartitionCount = PartitionCount Int
@@ -11,11 +12,22 @@ type Datapoint t = Undefined
                  | Loading t
                  | Loaded t
 
-type alias TopicInfo = {name: TopicName, sizeInByte: Datapoint Int, partitionCount: Datapoint Int, recordCount: Datapoint Int, spread: Datapoint Int, replicationFactor: Datapoint Int}
+type alias TopicInfo = { name: TopicName
+                       , sizeInByte: Datapoint TopicSize
+                       , partitionCount: Datapoint PartitionCount
+                       , recordCount: Datapoint RecordCount
+                       , spread: Datapoint Int
+                       , replicationFactor: Datapoint Int
+                       }
 
-initialTopicInfo name = {name = name, sizeInByte = Undefined, partitionCount = Undefined, recordCount = Undefined, spread = Undefined, replicationFactor = Undefined}
+initialTopicInfo name = { name = name
+                        , sizeInByte = Undefined
+                        , partitionCount = Undefined
+                        , recordCount = Undefined
+                        , spread = Undefined
+                        , replicationFactor = Undefined
+                        }
 
-type TopicName = TopicName String
 type alias TopicsInfo = List TopicInfo
 
 
@@ -24,7 +36,7 @@ applyTopicSize sizes previous =
     let (TopicName name) = previous.name
     in let maybeSize = Dict.get name sizes
     in case maybeSize of
-              Just size -> let (TopicSize sizeAsInt) = size in { previous | sizeInByte = Loaded sizeAsInt }
+              Just size -> { previous | sizeInByte = Loaded size }
               Nothing -> previous
 
 applyUpdateToTopicsInfo: TopicName -> (TopicInfo -> TopicInfo) -> TopicsInfo -> TopicsInfo
@@ -32,12 +44,12 @@ applyUpdateToTopicsInfo name update infos = List.map (\topicInfo -> if (topicInf
 
 applyRecordCount: TopicName -> RecordCount -> TopicsInfo -> TopicsInfo
 applyRecordCount name count infos =
-    let updatedInfo previous = let (RecordCount countAsInt) = count in { previous | recordCount = Loaded countAsInt }
+    let updatedInfo previous = { previous | recordCount = Loaded count }
     in applyUpdateToTopicsInfo name updatedInfo infos
 
 applyPartitionCount: TopicName -> PartitionCount -> TopicsInfo -> TopicsInfo
 applyPartitionCount name count infos =
-    let updatedInfo previous = let (PartitionCount countAsInt) = count in { previous | partitionCount = Loaded countAsInt }
+    let updatedInfo previous = { previous | partitionCount = Loaded count }
     in applyUpdateToTopicsInfo name updatedInfo infos
 
 

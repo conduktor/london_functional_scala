@@ -22,9 +22,14 @@ arrayToTr f s = List.map f s |> tr borderStyle
 
 topicToHtml : TopicInfo -> Html msg
 topicToHtml topic = arrayToTr identity
-                      (List.append
-                        [datapointToCell (\(TopicName name) -> name) (Loaded topic.name)]
-                        (List.map (datapointToCell String.fromInt) [topic.sizeInByte, topic.partitionCount, topic.recordCount, topic.spread, topic.replicationFactor]))
+                      (List.concat
+                        [ [datapointToCell (\(TopicName name) -> name) (Loaded topic.name)]
+                        , [datapointToCell (\(TopicSize size) -> String.fromInt size) topic.sizeInByte]
+                        , [datapointToCell (\(PartitionCount count) -> String.fromInt count) topic.partitionCount]
+                        , [datapointToCell (\(RecordCount count) -> String.fromInt count) topic.recordCount]
+                        , (List.map (datapointToCell String.fromInt) [topic.spread, topic.replicationFactor])
+                        ]
+                      )
 
 headerLine = arrayToTr headerToCell headers
 
