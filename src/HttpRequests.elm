@@ -2,10 +2,12 @@ module HttpRequests exposing (listNames, loadSizes, loadRecordCount, Msg(..))
 
 import Dict exposing (Dict)
 import Http
+import Url exposing (..)
 import Model exposing (..)
 
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Url.Builder exposing (crossOrigin, string)
 
 
 topicNameDecoder = Decode.map TopicName Decode.string
@@ -41,15 +43,17 @@ getWithBody r =
 type alias GotSizeResponse = { topicName: TopicName
                              , size: TopicSize }
 
+targetHost = "http://localhost:8090"
+
 listNames : Cmd Msg
 listNames = Http.get
-      { url = "http://localhost:8090/names"
+      { url = crossOrigin targetHost ["names"] []
       , expect = Http.expectJson GotNames topicNamesDecoder
       }
 
 loadSizes : List TopicName -> Cmd Msg
 loadSizes topics = getWithBody
-                 { url = "http://localhost:8090/size"
+                 { url = crossOrigin targetHost ["size"] []
                  , body = Http.jsonBody (topicNamesEncoder topics)
                  , expect = Http.expectJson GotSizes topicSizeResponseDecoder
                  }
@@ -59,7 +63,7 @@ toRecordCount topicName result = GotRecordCount (Result.map (\count -> (topicNam
 
 loadRecordCount : TopicName -> Cmd Msg
 loadRecordCount (TopicName topicName as topic) = Http.get
-                                   { url = String.join "/" ["http://localhost:8090/topics", topicName, "records?fields=count"]
+                                   { url = crossOrigin targetHost ["topics", topicName, "records"] [string "fields" "count"]
                                    , expect = Http.expectJson (toRecordCount topic) recordCountDecoder}
 
 type Msg = GotNames (Result Http.Error (List TopicName))
