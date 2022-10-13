@@ -23,7 +23,7 @@ arrayToTr f s = List.map f s |> tr borderStyle
 topicToHtml : TopicInfo -> Html msg
 topicToHtml topic = arrayToTr identity
                       (List.append
-                        (List.map (datapointToCell identity) [topic.name])
+                        (List.map (datapointToCell identity) [Loaded topic.name])
                         (List.map (datapointToCell String.fromInt) [topic.sizeInByte, topic.partition, topic.recordCount, topic.spread, topic.replicationFactor]))
 
 headerLine = arrayToTr headerToCell headers
@@ -35,6 +35,6 @@ tableHtml topics = table borderStyle <| List.append
 
 topicNamesToTopicInfos: List TopicName -> TopicsInfo
 topicNamesToTopicInfos names =
-    List.map (\topicName ->
-     let topicInfo = initialTopicInfo in
-     let (TopicName name) = topicName in { topicInfo | name = Loaded name}) names
+    List.map (\(TopicName topicName) ->
+     let topicInfo = initialTopicInfo topicName
+     in { topicInfo | name = topicName}) names

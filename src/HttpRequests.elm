@@ -1,4 +1,4 @@
-module HttpRequests exposing (listNames, loadSizes, Msg(..))
+module HttpRequests exposing (listNames, loadSizes, loadRecordCount, Msg(..))
 
 import Dict exposing (Dict)
 import Http
@@ -15,6 +15,8 @@ topicNameEncoder (TopicName name) = Encode.string name
 topicNamesEncoder names = Encode.list topicNameEncoder names
 
 topicSizeDecoder = Decode.map TopicSize Decode.int
+
+recordCountDecoder = Decode.map RecordCount Decode.int
 
 topicSizeResponseDecoder : Decode.Decoder (Dict String TopicSize)
 topicSizeResponseDecoder = Decode.dict topicSizeDecoder
@@ -52,5 +54,14 @@ loadSizes topics = getWithBody
                  , expect = Http.expectJson GotSizes topicSizeResponseDecoder
                  }
 
+toRecordCount: TopicName -> Result Http.Error RecordCount -> Msg
+toRecordCount topicName result = GotRecordCount (Result.map (\count -> (topicName, count)) result)
+
+loadRecordCount : TopicName -> Cmd Msg
+loadRecordCount (TopicName topicName as topic) = Http.get
+                                   { url = String.join "/" ["http://localhost:8090/topics", topicName, "records?fields=count"]
+                                   , expect = Http.expectJson (toRecordCount topic) recordCountDecoder}
+
 type Msg = GotNames (Result Http.Error (List TopicName))
          | GotSizes (Result Http.Error (Dict String TopicSize))
+         | GotRecordCount (Result Http.Error (TopicName, RecordCount))
