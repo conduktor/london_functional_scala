@@ -5,7 +5,7 @@ import Html exposing (table, text, td, tr, th, Html, Attribute)
 import Html.Attributes exposing (style)
 
 
-headers = ["topic", "size in bytes", "partitions", "records count", "spread", "replication factor"]
+headers = ["topic", "size in bytes", "partitions count", "records count", "spread", "replication factor"]
 
 borderStyle = [style "border" "1px solid black", style "border-collapse" "collapse"]
 
@@ -24,7 +24,7 @@ topicToHtml : TopicInfo -> Html msg
 topicToHtml topic = arrayToTr identity
                       (List.append
                         (List.map (datapointToCell identity) [Loaded topic.name])
-                        (List.map (datapointToCell String.fromInt) [topic.sizeInByte, topic.partition, topic.recordCount, topic.spread, topic.replicationFactor]))
+                        (List.map (datapointToCell String.fromInt) [topic.sizeInByte, topic.partitionCount, topic.recordCount, topic.spread, topic.replicationFactor]))
 
 headerLine = arrayToTr headerToCell headers
 

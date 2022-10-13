@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (Html, text)
-import HttpRequests exposing (listNames, loadSizes, loadRecordCount, Msg, Msg(..))
+import HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadSizes)
 import Table exposing (..)
 import Model exposing (..)
 
@@ -36,13 +36,19 @@ update msg model =
           let _ = Debug.log "topic names " topicNames in
             (Started (topicNamesToTopicInfos topicNames),
               Cmd.batch (
-                List.append
-                  [Cmd.map HttpMessage (loadSizes topicNames)]
-                  (List.map (Cmd.map HttpMessage << loadRecordCount) topicNames))
+                List.concat
+                  [ [Cmd.map HttpMessage (loadSizes topicNames)]
+                  , (List.map (Cmd.map HttpMessage << loadRecordCount) topicNames)
+                  -- FIXME , (List.map (Cmd.map HttpMessage << loadPartitionCount) topicNames)
+                  ]
+              )
             )
 
         Err _ ->
           (Failure, Cmd.none)
+    (HttpMessage (GotNames _), _) ->
+        (Failure, Cmd.none) -- FIXME should work
+
     (HttpMessage (GotSizes result), Started topicInfos) ->
       case result of
         Ok topicSizes ->
@@ -51,6 +57,10 @@ update msg model =
 
         Err _ ->
           (Failure, Cmd.none)
+
+    (HttpMessage (GotSizes _), LoadingNames) ->
+        (Failure, Cmd.none) -- FIXME error case
+
     (HttpMessage (GotRecordCount result), Started topicInfos) ->
       case result of
         Ok (topicName, recordCount) ->
@@ -59,9 +69,23 @@ update msg model =
         Err _ ->
           (Failure, Cmd.none)
 
-    (HttpMessage _, _) ->
-      (Failure, Cmd.none) -- FIXME
+    (HttpMessage (GotRecordCount _), LoadingNames) ->
+        (Failure, Cmd.none) -- FIXME error case
 
+    (HttpMessage (GotPartitionCount result), Started topicInfos) ->
+      case result of
+        Ok (topicName, partitionCount) ->
+          (Started (applyPartitionCount topicName partitionCount topicInfos), Cmd.none)
+
+        Err _ ->
+          (Failure, Cmd.none)
+
+    (HttpMessage (GotPartitionCount _), LoadingNames) ->
+        (Failure, Cmd.none) -- FIXME error case
+
+
+    ( HttpMessage _, Failure ) ->
+        (Failure, Cmd.none)
 
 -- SUBSCRIPTIONS
 subscriptions : Model -> Sub Msg
