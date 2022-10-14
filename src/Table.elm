@@ -10,11 +10,13 @@ headers = ["topic", "size in bytes", "partitions count", "records count", "sprea
 borderStyle = [style "border" "1px solid black", style "border-collapse" "collapse"]
 
 datapointToCell: (t -> String) -> Datapoint t -> Html msg
-datapointToCell toString datapoint = case datapoint of
-    Undefined -> td borderStyle [text "loading"]
-    Expired s -> td borderStyle [text (toString s)]
-    Loaded s -> td borderStyle [text (toString s)]
-    Loading s -> td borderStyle [text (toString s)]
+datapointToCell toString datapoint =
+  let displayString s = td borderStyle [text s]
+  in case datapoint of
+    Undefined -> displayString "loading"
+    Expired s -> displayString (toString s)
+    Loaded s  -> displayString (toString s)
+    Loading s -> displayString (toString s)
 
 headerToCell s = th borderStyle [text s]
 
@@ -22,15 +24,13 @@ arrayToTr f s = List.map f s |> tr borderStyle
 
 topicToHtml : TopicInfo -> Html msg
 topicToHtml topic = arrayToTr identity
-                      (List.concat
-                        [ [datapointToCell (\(TopicName name) -> name) (Loaded topic.name)]
-                        , [datapointToCell (\(TopicSize size) -> String.fromInt size) topic.sizeInByte]
-                        , [datapointToCell (\(PartitionCount count) -> String.fromInt count) topic.partitionCount]
-                        , [datapointToCell (\(RecordCount count) -> String.fromInt count) topic.recordCount]
-                        , [datapointToCell (\(Spread count) -> String.fromInt count) topic.spread]
-                        , [datapointToCell (\(ReplicationFactor count) -> String.fromInt count) topic.replicationFactor]
-                        ]
-                      )
+                      [ datapointToCell (\(TopicName name)          -> name)                   (topic.name |> Loaded)
+                      , datapointToCell (\(TopicSize size)          -> size  |> String.fromInt) topic.sizeInByte
+                      , datapointToCell (\(PartitionCount count)    -> count |> String.fromInt) topic.partitionCount
+                      , datapointToCell (\(RecordCount count)       -> count |> String.fromInt) topic.recordCount
+                      , datapointToCell (\(Spread count)            -> count |> String.fromInt) topic.spread
+                      , datapointToCell (\(ReplicationFactor count) -> count |> String.fromInt) topic.replicationFactor
+                      ]
 
 headerLine = arrayToTr headerToCell headers
 
