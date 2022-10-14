@@ -83,7 +83,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
                 aliveReplicas = List(BrokerId(1))
               )
             ),
-            replicationFactor = 1
+            replicationFactor = ReplicationFactor(1)
           ),
           topicName2 -> TopicDescription(
             partition = Map(
@@ -96,7 +96,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
                 aliveReplicas = List(BrokerId(1))
               )
             ),
-            replicationFactor = 1
+            replicationFactor = ReplicationFactor(1)
           )
         )
       } yield assertTrue(result == expected)

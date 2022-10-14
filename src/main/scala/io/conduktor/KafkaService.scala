@@ -48,6 +48,10 @@ object KafkaService {
 
   case class RecordCount(value: Long) extends AnyVal
 
+  case class ReplicationFactor(value: Int) extends AnyVal
+
+  case class PartitionCount(value: Int) extends AnyVal
+
   case class Offsets(beginOffset: Offset, endOffset: Offset)
 
   case class TopicSize(value: Long) extends AnyVal {
@@ -79,7 +83,7 @@ object KafkaService {
 
   case class TopicDescription(
       partition: Map[Partition, PartitionInfo],
-      replicationFactor: Int
+      replicationFactor: ReplicationFactor
   )
 
   object TopicDescription {
@@ -88,7 +92,7 @@ object KafkaService {
         topicDescription.partitions.map { partition =>
           Partition(partition.partition) -> PartitionInfo.from(partition)
         }.toMap,
-        topicDescription.partitions.map(_.replicas.length).head
+        ReplicationFactor(topicDescription.partitions.map(_.replicas.length).head)
       ) //TODO: rework head?
 
   }

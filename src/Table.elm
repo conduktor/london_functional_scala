@@ -5,7 +5,7 @@ import Html exposing (table, text, td, tr, th, Html, Attribute)
 import Html.Attributes exposing (style)
 
 
-headers = ["topic", "size in bytes", "partitions", "records count", "spread", "replication factor"]
+headers = ["topic", "size in bytes", "partitions count", "records count", "spread", "replication factor"]
 
 borderStyle = [style "border" "1px solid black", style "border-collapse" "collapse"]
 
@@ -22,9 +22,15 @@ arrayToTr f s = List.map f s |> tr borderStyle
 
 topicToHtml : TopicInfo -> Html msg
 topicToHtml topic = arrayToTr identity
-                      (List.append
-                        (List.map (datapointToCell identity) [Loaded topic.name])
-                        (List.map (datapointToCell String.fromInt) [topic.sizeInByte, topic.partition, topic.recordCount, topic.spread, topic.replicationFactor]))
+                      (List.concat
+                        [ [datapointToCell (\(TopicName name) -> name) (Loaded topic.name)]
+                        , [datapointToCell (\(TopicSize size) -> String.fromInt size) topic.sizeInByte]
+                        , [datapointToCell (\(PartitionCount count) -> String.fromInt count) topic.partitionCount]
+                        , [datapointToCell (\(RecordCount count) -> String.fromInt count) topic.recordCount]
+                        , [datapointToCell (\count -> String.fromInt count) topic.spread]
+                        , [datapointToCell (\(ReplicationFactor count) -> String.fromInt count) topic.replicationFactor]
+                        ]
+                      )
 
 headerLine = arrayToTr headerToCell headers
 
@@ -34,7 +40,4 @@ tableHtml topics = table borderStyle <| List.append
         <| List.map topicToHtml topics
 
 topicNamesToTopicInfos: List TopicName -> TopicsInfo
-topicNamesToTopicInfos names =
-    List.map (\(TopicName topicName) ->
-     let topicInfo = initialTopicInfo topicName
-     in { topicInfo | name = topicName}) names
+topicNamesToTopicInfos = List.map initialTopicInfo

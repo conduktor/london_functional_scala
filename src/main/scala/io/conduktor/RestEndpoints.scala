@@ -3,7 +3,7 @@ package io.conduktor
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import io.conduktor.CirceCodec._
-import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, RecordCount, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, RecordCount, ReplicationFactor, TopicDescription, TopicName, TopicPartition, TopicSize, PartitionCount}
 import sttp.tapir.{Endpoint, Schema, Validator}
 import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
@@ -78,6 +78,36 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         kafkaService.recordCount(topicName).handleError
       }
 
+  val replicationFactor =
+    endpoint.get
+      .in("topics")
+      .in(path[TopicName]("topicName"))
+      .in("replicationFactor")
+      .out(jsonBody[ReplicationFactor])
+      .errorOut(jsonBody[ErrorInfo])
+      .zServerLogic(topicName =>
+        kafkaService
+          .describeTopics(Seq(topicName))
+          .map(_.map { result => result._2.replicationFactor }.head)
+          .handleError
+      )
+
+  val partitionCount =
+    endpoint.get
+      .in("topics")
+      .in(path[TopicName]("topicName"))
+      .in("partitions")
+      .in(query[String]("fields")
+        .validate(Validator.enumeration("count" :: Nil)))
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[PartitionCount])
+      .zServerLogic { case (topicName, _) =>
+        kafkaService
+          .describeTopics(Seq(topicName))
+          .map(_.map { result => PartitionCount(result._2.partition.size) }.head)
+          .handleError
+      }
+
   val sizeTopics =
     endpoint.get
       .in("size")
@@ -145,7 +175,9 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         sizeTopics,
         beginningOffsets,
         endOffsets,
-        recordCount
+        recordCount,
+        replicationFactor,
+        partitionCount
       )
     ) @@ Middleware
       .cors(config)

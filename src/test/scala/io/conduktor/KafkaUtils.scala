@@ -26,14 +26,15 @@ object KafkaUtils {
 
   def createTopic(
       name: TopicName,
-      numPartition: Int = 3
+      numPartition: Int = 3,
+      replicationFactor: Short = 1
   ): URIO[AdminClient, Unit] = ZIO
     .serviceWithZIO[AdminClient](
       _.createTopic(
         NewTopic(
           name = name.value,
           numPartitions = numPartition,
-          replicationFactor = 1
+          replicationFactor = replicationFactor
         )
       )
     )
