@@ -14,6 +14,7 @@ lazy val root = (project in file("."))
       "dev.zio" %% "zio" % zioVersion,
       "dev.zio" %% "zio-kafka" % "2.0.0",
       "dev.zio" %% "zio-test" % zioVersion % Test,
+      "dev.zio" %% "zio-test-sbt" % zioVersion % Test,
       "com.dimafeng" %% "testcontainers-scala-kafka" % "0.40.10" % Test,
       "ch.qos.logback" % "logback-classic" % "1.4.1",
       "com.softwaremill.sttp.tapir" %% "tapir-zio" % "1.1.1",

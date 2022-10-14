@@ -4,7 +4,7 @@ import io.circe.{Encoder, Json, Printer}
 import io.circe.generic.semiauto.deriveEncoder
 import io.circe.literal.JsonStringContext
 import io.conduktor.KafkaService.TopicName
-import zhttp.http.{!!, HttpData, Method, Request, URL}
+import zhttp.http.{!!, HttpData, Method, Request, Status, URL}
 import zio.kafka.admin.AdminClient
 import zio.test.{ZIOSpecDefault, _}
 import zio.{Scope, Task, ZIO}
@@ -148,6 +148,80 @@ object RestEndpointSpec extends ZIOSpecDefault {
     }
   )
 
+  private val replicationFactorSpec = suite("/topics/{topic}/replicationFactor")(
+    test("should return replication factor for a topic") {
+      val topicName = TopicName("one")
+      for {
+        _ <- KafkaUtils.createTopic(topicName, numPartition = 1, replicationFactor = 1)
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+            method = Method.GET
+          )
+        )
+        responseBody <- response.data.toJson
+      } yield assertTrue(responseBody == json"1")
+    },
+    test("should return 404 for replication factor on unknown topic") {
+      val topicName = TopicName("one")
+      for {
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+            method = Method.GET
+          )
+        )
+      } yield assertTrue(response.status == Status.BadRequest) //TODO: change to notfound
+    },
+  )
+
+  private val partitionCountSpec = suite("/topics/{topic}/partitions")(
+    test("should return partition count for fields=count query param") {
+      val topicName = TopicName("one")
+      for {
+        _ <- KafkaUtils.createTopic(topicName, numPartition = 5)
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "partitions").setQueryParams("fields=count"),
+            method = Method.GET,
+          )
+        )
+        responseBody <- response.data.toJson
+      } yield assertTrue(responseBody == json"5")
+    },
+    test("should return 404 for replication factor on unknown topic") {
+      val topicName = TopicName("one")
+      for {
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "partitions").setQueryParams("fields=count"),
+            method = Method.GET
+          )
+        )
+      } yield assertTrue(response.status == Status.BadRequest) //TODO: change to notfound
+    },
+    test("should fail when retrieving anything but count field") {
+      val topicName = TopicName("one")
+      for {
+        _ <- KafkaUtils.createTopic(topicName, numPartition = 4)
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        _ <- KafkaUtils.produce(topicName, "k", "v")
+        app <- ZIO.service[RestEndpoints].map(_.app)
+        response <- app(
+          Request(
+            url = URL(!! / "topics" / topicName.value / "partitions")
+              .setQueryParams("fields=payload"),
+            method = Method.GET
+          )
+        )
+      } yield assertTrue(response.status == BadRequest)
+    }
+  )
+
   private val recordCountSpec = suite("/topics/{topic}/records")(
     test("should return topic record count for fields=count query param") {
       val topicName = TopicName("one")
@@ -249,7 +323,9 @@ object RestEndpointSpec extends ZIOSpecDefault {
       topicSizeSpec,
       beginningOffsetSpec,
       endOffsetSpec,
-      recordCountSpec
+      recordCountSpec,
+      replicationFactorSpec,
+      partitionCountSpec
     )
       .provide(
         RestEndpointsLive.layer,
