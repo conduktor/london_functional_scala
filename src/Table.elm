@@ -27,7 +27,7 @@ topicToHtml topic = arrayToTr identity
                         , [datapointToCell (\(TopicSize size) -> String.fromInt size) topic.sizeInByte]
                         , [datapointToCell (\(PartitionCount count) -> String.fromInt count) topic.partitionCount]
                         , [datapointToCell (\(RecordCount count) -> String.fromInt count) topic.recordCount]
-                        , [datapointToCell (\count -> String.fromInt count) topic.spread]
+                        , [datapointToCell (\(Spread count) -> String.fromInt count) topic.spread]
                         , [datapointToCell (\(ReplicationFactor count) -> String.fromInt count) topic.replicationFactor]
                         ]
                       )

@@ -1,4 +1,4 @@
-module HttpRequests exposing (listNames, loadSizes, loadRecordCount, loadPartitionCount, loadReplicationFactor, Msg(..))
+module HttpRequests exposing (listNames, loadSizes, loadRecordCount, loadPartitionCount, loadReplicationFactor, loadSpread, Msg(..))
 
 import Dict exposing (Dict)
 import Http
@@ -22,6 +22,8 @@ recordCountDecoder = Decode.map RecordCount Decode.int
 partitionCountDecoder = Decode.map PartitionCount Decode.int
 
 replicationFactorDecoder = Decode.map ReplicationFactor Decode.int
+
+spreadDecoder = Decode.map Spread Decode.int
 
 topicSizeResponseDecoder : Decode.Decoder (Dict String TopicSize)
 topicSizeResponseDecoder = Decode.dict topicSizeDecoder
@@ -85,8 +87,17 @@ loadReplicationFactor (TopicName topicName as topic) = Http.get
                                    { url = crossOrigin targetHost ["topics", topicName, "replicationFactor"] []
                                    , expect = Http.expectJson (toReplicationFactor topic) replicationFactorDecoder}
 
+toSpread: TopicName -> Result Http.Error Spread -> Msg
+toSpread topicName result = GotSpread (Result.map (\count -> (topicName, count)) result)
+
+loadSpread : TopicName -> Cmd Msg
+loadSpread (TopicName topicName as topic) = Http.get
+                                   { url = crossOrigin targetHost ["topics", topicName, "spread"] []
+                                   , expect = Http.expectJson (toSpread topic) spreadDecoder}
+
 type Msg = GotNames (Result Http.Error (List TopicName))
          | GotSizes (Result Http.Error (Dict String TopicSize))
          | GotRecordCount (Result Http.Error (TopicName, RecordCount))
          | GotPartitionCount (Result Http.Error (TopicName, PartitionCount))
          | GotReplicationFactor (Result Http.Error (TopicName, ReplicationFactor))
+         | GotSpread (Result Http.Error (TopicName, Spread))
