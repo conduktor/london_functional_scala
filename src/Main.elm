@@ -39,7 +39,7 @@ update msg model =
                 List.concat
                   [ [Cmd.map HttpMessage (loadSizes topicNames)]
                   , (List.map (Cmd.map HttpMessage << loadRecordCount) topicNames)
-                  -- FIXME , (List.map (Cmd.map HttpMessage << loadPartitionCount) topicNames)
+                  , (List.map (Cmd.map HttpMessage << loadPartitionCount) topicNames)
                   ]
               )
             )
