@@ -22,7 +22,7 @@ type alias TopicInfo = { name: TopicName
                        , replicationFactor: Datapoint ReplicationFactor
                        }
 
-initialTopicInfo name = { name = name
+topicNameToTopicInfo name = { name = name
                         , sizeInByte = Undefined
                         , partitionCount = Undefined
                         , recordCount = Undefined
@@ -33,6 +33,14 @@ initialTopicInfo name = { name = name
 type alias TopicsInfo = List TopicInfo
 
 
+applyUpdateToTopicsInfo: (TopicInfo -> TopicInfo) -> TopicName -> TopicsInfo -> TopicsInfo
+applyUpdateToTopicsInfo update name = List.map (\topicInfo -> if (topicInfo.name == name) then update topicInfo else topicInfo)
+
+applyRecordCount       count  = applyUpdateToTopicsInfo (\previous -> { previous | recordCount = Loaded count })
+applyPartitionCount    count  = applyUpdateToTopicsInfo (\previous -> { previous | partitionCount = Loaded count })
+applyReplicationFactor count  = applyUpdateToTopicsInfo (\previous -> { previous | replicationFactor = Loaded count })
+applySpread            spread = applyUpdateToTopicsInfo (\previous -> { previous | spread = Loaded spread })
+
 applyTopicSize: Dict String TopicSize -> TopicInfo -> TopicInfo
 applyTopicSize sizes previous =
     let
@@ -42,21 +50,5 @@ applyTopicSize sizes previous =
               Just size -> { previous | sizeInByte = Loaded size }
               Nothing -> previous
 
-applyUpdateToTopicsInfo: (TopicInfo -> TopicInfo) -> TopicName -> TopicsInfo -> TopicsInfo
-applyUpdateToTopicsInfo update name = List.map (\topicInfo -> if (topicInfo.name == name) then update topicInfo else topicInfo)
-
-applyRecordCount: RecordCount -> TopicName -> TopicsInfo -> TopicsInfo
-applyRecordCount count = applyUpdateToTopicsInfo (\previous -> { previous | recordCount = Loaded count })
-
-applyPartitionCount: PartitionCount -> TopicName -> TopicsInfo -> TopicsInfo
-applyPartitionCount count = applyUpdateToTopicsInfo (\previous -> { previous | partitionCount = Loaded count })
-
-applyReplicationFactor: ReplicationFactor -> TopicName -> TopicsInfo -> TopicsInfo
-applyReplicationFactor count = applyUpdateToTopicsInfo (\previous -> { previous | replicationFactor = Loaded count })
-
-applySpread: Spread -> TopicName -> TopicsInfo -> TopicsInfo
-applySpread count = applyUpdateToTopicsInfo (\previous -> { previous | spread = Loaded count })
-
 applyTopicSizes: Dict String TopicSize -> TopicsInfo -> TopicsInfo
 applyTopicSizes sizes = List.map (applyTopicSize sizes)
-

@@ -34,7 +34,7 @@ update msg model =
       case result of
         Ok topicNames ->
           let _ = Debug.log "topic names " topicNames in
-            (Started (topicNamesToTopicInfos topicNames),
+            (Started (List.map topicNameToTopicInfo topicNames),
               Cmd.batch (
                 List.concat
                   [ [Cmd.map HttpMessage (loadSizes topicNames)]
