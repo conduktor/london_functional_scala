@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (Html, text)
-import HttpRequests exposing (listNames, loadSizes, Msg, Msg(..))
+import HttpRequests exposing (listNames, loadSizes, loadRecordCount, Msg, Msg(..))
 import Table exposing (..)
 import Model exposing (..)
 
@@ -34,7 +34,12 @@ update msg model =
       case result of
         Ok topicNames ->
           let _ = Debug.log "topic names " topicNames in
-            (Started (topicNamesToTopicInfos topicNames), Cmd.map HttpMessage (loadSizes topicNames))
+            (Started (topicNamesToTopicInfos topicNames),
+              Cmd.batch (
+                List.append
+                  [Cmd.map HttpMessage (loadSizes topicNames)]
+                  (List.map (Cmd.map HttpMessage << loadRecordCount) topicNames))
+            )
 
         Err _ ->
           (Failure, Cmd.none)
@@ -43,6 +48,13 @@ update msg model =
         Ok topicSizes ->
           let _ = Debug.log "topic sizes " topicSizes in
             (Started (applyTopicSizes topicInfos topicSizes), Cmd.none)
+
+        Err _ ->
+          (Failure, Cmd.none)
+    (HttpMessage (GotRecordCount result), Started topicInfos) ->
+      case result of
+        Ok (topicName, recordCount) ->
+          (Started (applyRecordCount topicName recordCount topicInfos), Cmd.none)
 
         Err _ ->
           (Failure, Cmd.none)
@@ -60,7 +72,7 @@ view : Model -> Html Msg
 view model =
   case model of
     Failure ->
-      text "I was unable to load your book."
+      text "I was unable to load topics."
 
     LoadingNames ->
       text "Loading..."
