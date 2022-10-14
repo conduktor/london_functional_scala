@@ -6,6 +6,7 @@ type TopicName = TopicName String
 type TopicSize = TopicSize Int
 type RecordCount = RecordCount Int
 type PartitionCount = PartitionCount Int
+type ReplicationFactor = ReplicationFactor Int
 
 type Datapoint t = Undefined
                  | Expired t
@@ -17,7 +18,7 @@ type alias TopicInfo = { name: TopicName
                        , partitionCount: Datapoint PartitionCount
                        , recordCount: Datapoint RecordCount
                        , spread: Datapoint Int
-                       , replicationFactor: Datapoint Int
+                       , replicationFactor: Datapoint ReplicationFactor
                        }
 
 initialTopicInfo name = { name = name
@@ -48,6 +49,9 @@ applyRecordCount count = applyUpdateToTopicsInfo (\previous -> { previous | reco
 
 applyPartitionCount: PartitionCount -> TopicName -> TopicsInfo -> TopicsInfo
 applyPartitionCount count = applyUpdateToTopicsInfo (\previous -> { previous | partitionCount = Loaded count })
+
+applyReplicationFactor: ReplicationFactor -> TopicName -> TopicsInfo -> TopicsInfo
+applyReplicationFactor count = applyUpdateToTopicsInfo (\previous -> { previous | replicationFactor = Loaded count })
 
 applyTopicSizes: Dict String TopicSize -> TopicsInfo -> TopicsInfo
 applyTopicSizes sizes = List.map (applyTopicSize sizes)

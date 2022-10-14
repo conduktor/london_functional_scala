@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (Html, text)
-import HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadSizes)
+import HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadReplicationFactor, loadSizes)
 import Table exposing (..)
 import Model exposing (..)
 
@@ -40,6 +40,7 @@ update msg model =
                   [ [Cmd.map HttpMessage (loadSizes topicNames)]
                   , (List.map (Cmd.map HttpMessage << loadRecordCount) topicNames)
                   , (List.map (Cmd.map HttpMessage << loadPartitionCount) topicNames)
+                  , (List.map (Cmd.map HttpMessage << loadReplicationFactor) topicNames)
                   ]
               )
             )
@@ -82,6 +83,16 @@ update msg model =
 
     (HttpMessage (GotPartitionCount _), LoadingNames) ->
         (Failure, Cmd.none) -- FIXME error case
+
+    (HttpMessage (GotReplicationFactor result), Started topicInfos) ->
+      case result of
+        Ok (topicName, replicationFactor) ->
+          (Started (applyReplicationFactor replicationFactor topicName topicInfos), Cmd.none)
+        Err _ ->
+          (Failure, Cmd.none)
+
+    (HttpMessage (GotReplicationFactor _), LoadingNames) ->
+       (Failure, Cmd.none) -- FIXME error case
 
 
     ( HttpMessage _, Failure ) ->
