@@ -1,7 +1,6 @@
 package io.conduktor
 
 import io.circe.{Encoder, Json, Printer}
-import io.circe.generic.semiauto.deriveEncoder
 import io.circe.literal.JsonStringContext
 import io.conduktor.KafkaService.TopicName
 import zhttp.http.{!!, HttpData, Method, Request, Status, URL}
