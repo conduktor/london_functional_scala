@@ -3,7 +3,6 @@ package io.conduktor
 import io.conduktor.KafkaService._
 import zio.kafka.admin.AdminClient
 import zio.kafka.admin.AdminClient.{Node, OffsetSpec, TopicPartitionInfo}
-import zio.stream.ZStream
 import zio.{Task, ZIO, ZLayer}
 
 trait KafkaService {
@@ -28,12 +27,20 @@ trait KafkaService {
   def recordCount(topicName: TopicName): Task[RecordCount]
 
   def topicSpread(topicName: TopicName): Task[Spread]
+
+  def topicSpread(numBroker: BrokerCount, topicDescription: TopicDescription): Spread
+
+  val getBrokerIds: Task[List[BrokerId]]
+
+  def getTopicSize(brokerIds: Seq[BrokerId]): Task[Map[TopicName, TopicSize]]
 }
 
 object KafkaService {
 
-
   case class TopicName(value: String) extends AnyVal
+  object TopicName {
+    implicit val ordering: Ordering[TopicName] = (x: TopicName, y: TopicName) => implicitly[Ordering[String]].compare(x.value, y.value)
+  }
 
   case class Partition(value: Int) extends AnyVal
 
@@ -137,27 +144,34 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
     }
   }
 
-  private val getBrokerIds = adminClient.describeClusterNodes().map(_.map(_.id))
+  override val getBrokerIds: ZIO[Any, Throwable, List[BrokerId]] =
+    adminClient.describeClusterNodes().map(_.map(broker => BrokerId(broker.id)))
 
   override def getTopicSize: Task[Map[TopicName, TopicSize]] =
-    for {
-      brokerIds   <- getBrokerIds
-      description <- adminClient.describeLogDirs(brokerIds)
-    } yield description.values.flatten
-      .flatMapValues(_.replicaInfos)
-      .mapBoth(
-        topicPartition => TopicPartition.from(topicPartition),
-        info => TopicSize(info.size),
-      )
-      .groupMapReduce { case (topicPartition, _) => topicPartition.topicName } { case (_, size) =>
-        size
-      }(_ + _)
+    getBrokerIds.flatMap(getTopicSize(_))
+
+  override def getTopicSize(brokerIds: Seq[BrokerId]): Task[Map[TopicName, TopicSize]] =
+    adminClient.describeLogDirs(brokerIds.map(_.value)).map { description =>
+      description.values.flatten
+        .flatMapValues(_.replicaInfos)
+        .mapBoth(
+          topicPartition => TopicPartition.from(topicPartition),
+          info => TopicSize(info.size),
+        )
+        .groupMapReduce { case (topicPartition, _) => topicPartition.topicName } { case (_, size) =>
+          size
+        }(_ + _)
+    }
 
   override def topicSpread(topicName: TopicName): Task[Spread] =
     for {
       numBrokers  <- brokerCount
-      numReplicas <- describeTopics(Seq(topicName)).map(topics => topics.head._2.partition.values.flatMap(_.aliveReplicas).toSet.size)
-    } yield Spread(numBrokers.value.toDouble / numReplicas.toDouble)
+      description <- describeTopics(Seq(topicName)).map(topics => topics.head._2)
+    } yield topicSpread(numBrokers, description)
+
+  override def topicSpread(numBroker: BrokerCount, topicDescription: TopicDescription): Spread = Spread(
+    topicDescription.partition.values.flatMap(_.aliveReplicas).toSet.size.toDouble / numBroker.value.toDouble
+  )
 
   private def offsets(
     topicPartition: Seq[TopicPartition],

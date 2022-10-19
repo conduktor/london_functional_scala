@@ -63,7 +63,7 @@ object CirceCodec {
     KeyEncoder.encodeKeyString.contramap[TopicName](_.value)
 
   implicit val topicNameKeyDecoder: KeyDecoder[TopicName] =
-    KeyDecoder.decodeKeyString.map[TopicName](TopicName)
+    KeyDecoder.decodeKeyString.map[TopicName](TopicName(_))
 
   implicit val topicDescription: Codec[TopicDescription] =
     deriveCodec[TopicDescription]

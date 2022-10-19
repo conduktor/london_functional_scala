@@ -15,7 +15,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
   case class Record(key: String, value: String)
 
   val anyTopic: Gen[Any, NewTopic] =
-    (Gen.alphaNumericString.filter(!_.isBlank).map(TopicName) <*> Gen.small(size => Gen.const(TopicSize(size))))
+    (Gen.alphaNumericString.filter(!_.isBlank).map(TopicName(_)) <*> Gen.small(size => Gen.const(TopicSize(size))))
       .map { case (name, size) =>
         NewTopic(name.value, size.value.toInt + 1, replicationFactor = 1)
       }
