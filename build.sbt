@@ -11,6 +11,8 @@ inThisBuild(
   )
 )
 
+addCommandAlias("fix", "; all compile:scalafix test:scalafix; all scalafmtSbt scalafmtAll")
+
 val zioVersion = "2.0.2"
 
 val circeVersion = "0.14.3"
