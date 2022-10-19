@@ -1,0 +1,5 @@
+-Dfile.encoding=UTF8
+-Xms265M
+-Xmx5G
+-XX:MaxRAMPercentage=80.0
+-XX:+UseG1GC
