@@ -235,6 +235,28 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     }
   )
 
+  private val spreadSpec = suite("spread")(
+    test("should return spread of a partition") {
+      val topicName = TopicName("spreadSpecTopicForTest")
+      for {
+        - <- KafkaUtils.createTopic(topicName, numPartition = 3)
+        spread <- ZIO
+          .serviceWithZIO[KafkaService](
+            _.topicSpread(topicName)
+          )
+      } yield assertTrue(spread == TopicSpread(1.0))
+    },
+    test("should fail when topic does not exist") {
+      assertZIO(
+        ZIO
+          .serviceWithZIO[KafkaService](
+            _.topicSpread(TopicName("jenexistepas"))
+          )
+          .either
+      )(isLeft(isSubtype[UnknownTopicOrPartitionException](anything)))
+    }
+  )
+
   override def spec = suite("KafkaService")(
     suite("not shared kafka")(
       listTopicsSpec,
@@ -252,7 +274,8 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       describeTopicsSpec,
       beginningOffsetsSpec,
       endOffsetsSpec,
-      brokerCountSpec
+      brokerCountSpec,
+      spreadSpec
     )
       .provideShared(
         KafkaTestContainer.kafkaLayer,

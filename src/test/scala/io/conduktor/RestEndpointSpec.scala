@@ -148,33 +148,75 @@ object RestEndpointSpec extends ZIOSpecDefault {
     }
   )
 
-  private val replicationFactorSpec = suite("/topics/{topic}/replicationFactor")(
-    test("should return replication factor for a topic") {
+  private val replicationFactorSpec =
+    suite("/topics/{topic}/replicationFactor")(
+      test("should return replication factor for a topic") {
+        val topicName = TopicName("one")
+        for {
+          _ <- KafkaUtils.createTopic(
+            topicName,
+            numPartition = 1,
+            replicationFactor = 1
+          )
+          app <- ZIO.service[RestEndpoints].map(_.app)
+          response <- app(
+            Request(
+              url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+              method = Method.GET
+            )
+          )
+          responseBody <- response.data.toJson
+        } yield assertTrue(responseBody == json"1")
+      },
+      test("should return 404 for replication factor on unknown topic") {
+        val topicName = TopicName("one")
+        for {
+          app <- ZIO.service[RestEndpoints].map(_.app)
+          response <- app(
+            Request(
+              url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+              method = Method.GET
+            )
+          )
+        } yield assertTrue(
+          response.status == Status.BadRequest
+        ) //TODO: change to notfound
+      }
+    )
+
+  private val spreadSpec = suite("/topics/{topic}/spread")(
+    test("should return spread size") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 1, replicationFactor = 1)
+        _ <- KafkaUtils.createTopic(
+          topicName,
+          numPartition = 1,
+          replicationFactor = 1
+        )
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+            url = URL(!! / "topics" / topicName.value / "spread"),
             method = Method.GET
           )
         )
         responseBody <- response.data.toJson
-      } yield assertTrue(responseBody == json"1")
+      } yield assertTrue(responseBody == json"1.0")
     },
-    test("should return 404 for replication factor on unknown topic") {
-      val topicName = TopicName("one")
+    test("should return 404 for unknown topic") {
+      val topicName = TopicName("jenexistepas")
       for {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+            url = URL(!! / "topics" / topicName.value / "spread"),
             method = Method.GET
           )
         )
-      } yield assertTrue(response.status == Status.BadRequest) //TODO: change to notfound
-    },
+      } yield assertTrue(
+        response.status == Status.BadRequest
+      ) //TODO: change to notfound
+    }
   )
 
   private val partitionCountSpec = suite("/topics/{topic}/partitions")(
@@ -185,8 +227,9 @@ object RestEndpointSpec extends ZIOSpecDefault {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "topics" / topicName.value / "partitions").setQueryParams("fields=count"),
-            method = Method.GET,
+            url = URL(!! / "topics" / topicName.value / "partitions")
+              .setQueryParams("fields=count"),
+            method = Method.GET
           )
         )
         responseBody <- response.data.toJson
@@ -198,11 +241,14 @@ object RestEndpointSpec extends ZIOSpecDefault {
         app <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
           Request(
-            url = URL(!! / "topics" / topicName.value / "partitions").setQueryParams("fields=count"),
+            url = URL(!! / "topics" / topicName.value / "partitions")
+              .setQueryParams("fields=count"),
             method = Method.GET
           )
         )
-      } yield assertTrue(response.status == Status.BadRequest) //TODO: change to notfound
+      } yield assertTrue(
+        response.status == Status.BadRequest
+      ) //TODO: change to notfound
     },
     test("should fail when retrieving anything but count field") {
       val topicName = TopicName("one")
@@ -325,7 +371,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
       endOffsetSpec,
       recordCountSpec,
       replicationFactorSpec,
-      partitionCountSpec
+      partitionCountSpec,
+      spreadSpec
     )
       .provide(
         RestEndpointsLive.layer,
