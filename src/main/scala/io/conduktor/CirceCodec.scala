@@ -14,7 +14,7 @@ import io.conduktor.KafkaService.{
   TopicDescription,
   TopicName,
   TopicPartition,
-  TopicSize
+  TopicSize,
 }
 
 object CirceCodec {
