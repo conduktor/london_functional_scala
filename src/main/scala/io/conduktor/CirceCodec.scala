@@ -10,11 +10,11 @@ import io.conduktor.KafkaService.{
   PartitionInfo,
   RecordCount,
   ReplicationFactor,
+  Spread,
   TopicDescription,
   TopicName,
   TopicPartition,
-  TopicSize,
-  TopicSpread
+  TopicSize
 }
 
 object CirceCodec {
@@ -38,9 +38,9 @@ object CirceCodec {
     .from(Decoder.decodeLong, Encoder.encodeLong)
     .iemap(anLong => Right(RecordCount(anLong)))(_.value)
 
-  implicit val topicSpread: Codec[TopicSpread] = Codec
+  implicit val topicSpread: Codec[Spread] = Codec
     .from(Decoder.decodeDouble, Encoder.encodeDouble)
-    .iemap(aDouble => Right(TopicSpread(aDouble)))(_.value)
+    .iemap(aDouble => Right(Spread(aDouble)))(_.value)
 
   implicit val topicNameCodec: Codec[TopicName] =
     Codec

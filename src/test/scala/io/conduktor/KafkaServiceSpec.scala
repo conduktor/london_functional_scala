@@ -24,7 +24,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
 
   val anyRecord: Gen[Any, Record] =
     (Gen.alphaNumericString <*> Gen.alphaNumericString).map {
-      case ((key, value)) => Record(key, value)
+      case (key, value) => Record(key, value)
     }
 
   private val getTopicSizeSpec = suite("getTopicSize")(
@@ -236,7 +236,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
           _.recordCount(topicName)
         )
       } yield assertTrue(
-        result == (RecordCount(6))
+        result == RecordCount(6)
       )
     }
   )
@@ -262,7 +262,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
           .serviceWithZIO[KafkaService](
             _.topicSpread(topicName)
           )
-      } yield assertTrue(spread == TopicSpread(1.0))
+      } yield assertTrue(spread == Spread(1.0))
     },
     test("should fail when topic does not exist") {
       assertZIO(
@@ -339,48 +339,167 @@ object KafkaServiceSpec extends ZIOSpecDefault {
         )
       )
     },
-    test("should return size of topics - property") {
-      val topicWithRecords = anyTopic <*> Gen.setOf(anyRecord)
-      Ref.make(0).flatMap { topicPrefix =>
-        check(Gen.setOf(topicWithRecords)) { topicsWithRecords =>
-          for {
-            expected <- ZIO.foreach(topicsWithRecords) {
-              case (topic, records) =>
-                for {
-                  topicName <- topicPrefix.getAndUpdate(_ + 1).map { prec =>
-                    TopicName(s"$prec${topic.name}")
+    suite("property testing")(
+      test("should return size of topics") {
+        Ref.make(0).flatMap { topicPrefix =>
+          check(Gen.mapOf(anyTopic, Gen.setOf(anyRecord))) {
+            topicsWithRecords =>
+              for {
+                expected <- ZIO
+                  .foreach(topicsWithRecords.toList) {
+                    case (topic, records) =>
+                      for {
+                        topicName <- topicPrefix.getAndUpdate(_ + 1).map {
+                          prefix =>
+                            TopicName(s"$prefix-${topic.name}")
+                        }
+                        _ <- KafkaUtils.createTopic(topicName)
+                        size <- ZIO.foldLeft(records)(0) { case (acc, record) =>
+                          KafkaUtils
+                            .produce(
+                              topic = topicName,
+                              key = record.key,
+                              value = record.value
+                            )
+                            .as(
+                              acc + record.key.getBytes.length + record.value.getBytes.length + 68
+                            )
+                        }
+                      } yield Info.Size(topicName, TopicSize(size))
                   }
-                  _ <- ZIO.debug(s"creating topic: $topicName")
-                  _ <- KafkaUtils.createTopic(topicName)
-                  recordCount <- ZIO.foldLeft(records)(0) {
-                    case (acc, record) =>
-                      KafkaUtils
-                        .produce(
-                          topic = topicName,
-                          key = record.key,
-                          value = record.value
-                        )
-                        .as(acc + 1)
+                actual <- ZStream
+                  .serviceWithStream[KafkaService](
+                    _.streamInfos
+                  )
+                  .runCollect
+                  .map(_.toList)
+              } yield assert(actual)(hasSubset(expected))
+          }
+        }
+      },
+      test("should return record counts of topic") {
+        Ref.make(0).flatMap { topicPrefix =>
+          check(Gen.mapOf(anyTopic, Gen.setOf(anyRecord))) {
+            topicsWithRecords =>
+              for {
+                expected <- ZIO
+                  .foreach(topicsWithRecords.toList) {
+                    case (topic, records) =>
+                      for {
+                        topicName <- topicPrefix.getAndUpdate(_ + 1).map {
+                          prefix =>
+                            TopicName(s"$prefix-${topic.name}")
+                        }
+                        _ <- KafkaUtils.createTopic(topicName)
+                        recordCount <- ZIO.foldLeft(records)(0) {
+                          case (acc, record) =>
+                            KafkaUtils
+                              .produce(
+                                topic = topicName,
+                                key = record.key,
+                                value = record.value
+                              )
+                              .as(
+                                acc + 1
+                              )
+                        }
+                      } yield Info
+                        .RecordCountInfo(topicName, RecordCount(recordCount))
                   }
-                } yield Info.Size(topicName, TopicSize(recordCount))
-            }
-            actual <- ZStream
-              .serviceWithStream[KafkaService](
-                _.streamInfos
-              )
-              .runCollect
-          } yield assert(actual)(hasSubset(expected))
+                actual <- ZStream
+                  .serviceWithStream[KafkaService](
+                    _.streamInfos
+                  )
+                  .runCollect
+                  .map(_.toList)
+              } yield assert(actual)(hasSubset(expected))
+          }
+        }
+      },
+      test("should return partition count") {
+        Ref.make(0).flatMap { topicPrefix =>
+          check(Gen.setOf(anyTopic)) { topics =>
+            for {
+              expected <- ZIO
+                .foreach(topics) { topic =>
+                  for {
+                    topicName <- topicPrefix.getAndUpdate(_ + 1).map { prefix =>
+                      TopicName(s"$prefix-${topic.name}")
+                    }
+                    _ <- KafkaUtils.createTopic(topicName, topic.numPartitions)
+                  } yield Info
+                    .PartitionInfo(topicName, Partition(topic.numPartitions))
+                }
+              actual <- ZStream
+                .serviceWithStream[KafkaService](
+                  _.streamInfos
+                )
+                .runCollect
+                .map(_.toList)
+            } yield assert(actual)(hasSubset(expected))
+          }
+        }
+      },
+      test("should return replication factor count") {
+        Ref.make(0).flatMap { topicPrefix =>
+          check(Gen.setOf(anyTopic)) { topics =>
+            for {
+              expected <- ZIO
+                .foreach(topics) { topic =>
+                  for {
+                    topicName <- topicPrefix.getAndUpdate(_ + 1).map { prefix =>
+                      TopicName(s"$prefix-${topic.name}")
+                    }
+                    _ <- KafkaUtils.createTopic(
+                      topicName
+                    ) //can't create any other replication factor than 1 yet
+                  } yield Info
+                    .ReplicationFactorInfo(topicName, ReplicationFactor(1))
+                }
+              actual <- ZStream
+                .serviceWithStream[KafkaService](
+                  _.streamInfos
+                )
+                .runCollect
+                .map(_.toList)
+            } yield assert(actual)(hasSubset(expected))
+          }
+        }
+      },
+      test("should return spread") {
+        Ref.make(0).flatMap { topicPrefix =>
+          check(Gen.setOf(anyTopic)) { topics =>
+            for {
+              expected <- ZIO
+                .foreach(topics) { topic =>
+                  for {
+                    topicName <- topicPrefix.getAndUpdate(_ + 1).map { prefix =>
+                      TopicName(s"$prefix-${topic.name}")
+                    }
+                    _ <- KafkaUtils.createTopic(
+                      topicName
+                    ) //can't create any other spread than 1 yet
+                  } yield Info
+                    .SpreadInfo(topicName, Spread(1))
+                }
+              actual <- ZStream
+                .serviceWithStream[KafkaService](
+                  _.streamInfos
+                )
+                .runCollect
+                .map(_.toList)
+            } yield assert(actual)(hasSubset(expected))
+          }
         }
       }
-    }
+    ) @@ samples(10) @@ shrinks(0)
   )
-
 
   override def spec = suite("KafkaService")(
     suite("not shared kafka")(
-      /*listTopicsSpec,
+      listTopicsSpec,
       getTopicSizeSpec,
-      brokerCountSpec,*/
+      brokerCountSpec,
       infoSpec
     ).provide(
       KafkaTestContainer.kafkaLayer,
@@ -394,7 +513,8 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       describeTopicsSpec,
       beginningOffsetsSpec,
       endOffsetsSpec,
-      brokerCountSpec
+      brokerCountSpec,
+      spreadSpec
     )
       .provideShared(
         KafkaTestContainer.kafkaLayer,
