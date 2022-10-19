@@ -4,11 +4,29 @@ import io.conduktor.KafkaService._
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException
 import zio._
 import zio.kafka.admin.AdminClient
+import zio.kafka.admin.AdminClient.NewTopic
+import zio.stream.ZStream
 import zio.test.Assertion._
 import zio.test.TestAspect.{nondeterministic, samples, shrinks}
 import zio.test._
 
 object KafkaServiceSpec extends ZIOSpecDefault {
+
+  case class Record(key: String, value: String)
+
+  val anyTopic: Gen[Any, NewTopic] =
+    (Gen.alphaNumericString.filter(!_.isBlank).map(TopicName) <*> Gen.small(
+      size => Gen.const(TopicSize(size))
+    ))
+      .map { case (name, size) =>
+        NewTopic(name.value, size.value.toInt + 1, replicationFactor = 1)
+      }
+
+  val anyRecord: Gen[Any, Record] =
+    (Gen.alphaNumericString <*> Gen.alphaNumericString).map {
+      case ((key, value)) => Record(key, value)
+    }
+
   private val getTopicSizeSpec = suite("getTopicSize")(
     test("should return 1 for non empty topic partition") {
       val topicOne = TopicName("topicOne")
@@ -257,11 +275,106 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     }
   )
 
+  private val infoSpec = suite("info")(
+    test("should first return some topic names") {
+      val topicOne = TopicName("topicOne")
+      val topicTwo = TopicName("topicTwo")
+      val topicThree = TopicName("topicThree")
+      val topicFour = TopicName("topicFour")
+      for {
+        _ <- KafkaUtils.createTopic(name = topicOne)
+        _ <- KafkaUtils.createTopic(name = topicTwo)
+        _ <- KafkaUtils.createTopic(name = topicThree)
+        _ <- KafkaUtils.createTopic(name = topicFour)
+        names <- ZStream
+          .serviceWithStream[KafkaService](
+            _.streamInfos
+          )
+          .runHead
+      } yield assert(names)(
+        isSome(
+          isSubtype[Info.Topics](
+            hasField(
+              "names",
+              _.topics,
+              hasSameElements(Seq(topicOne, topicTwo, topicThree, topicFour))
+            )
+          )
+        )
+      )
+    },
+    test("should return size of topics - example") {
+      val topicOne = TopicName("topicOne")
+      val topicTwo = TopicName("topicTwo")
+      val topicThree = TopicName("topicThree")
+      val topicFour = TopicName("topicFour")
+      for {
+        _ <- KafkaUtils.createTopic(name = topicOne)
+        _ <- KafkaUtils.produce(topic = topicOne, key = "bar", value = "foo1")
+        _ <- KafkaUtils.produce(topic = topicOne, key = "bar", value = "foo2")
+        _ <- KafkaUtils.createTopic(name = topicTwo)
+        _ <- KafkaUtils.produce(topic = topicTwo, key = "bar", value = "foo1")
+        _ <- KafkaUtils.produce(topic = topicTwo, key = "bar", value = "foo2")
+        _ <- KafkaUtils.produce(topic = topicTwo, key = "bar", value = "foo3")
+        _ <- KafkaUtils.createTopic(name = topicThree)
+        _ <- KafkaUtils.produce(topic = topicThree, key = "bar", value = "foo1")
+        _ <- KafkaUtils.produce(topic = topicThree, key = "bar", value = "foo2")
+        _ <- KafkaUtils.produce(topic = topicThree, key = "bar", value = "foo3")
+        _ <- KafkaUtils.produce(topic = topicThree, key = "bar", value = "foo4")
+        _ <- KafkaUtils.createTopic(name = topicFour)
+        infos <- ZStream
+          .serviceWithStream[KafkaService](
+            _.streamInfos
+          )
+          .debug("info stream : ")
+          .runCollect
+      } yield assert(infos)(
+        hasSubset(
+          Seq(
+            Info.Size(topicOne, TopicSize(150)),
+            Info.Size(topicTwo, TopicSize(225)),
+            Info.Size(topicThree, TopicSize(300)),
+            Info.Size(topicFour, TopicSize(0))
+          )
+        )
+      )
+    },
+    test("should return size of topics - property") {
+      val topicWithRecords = anyTopic <*> Gen.setOf(anyRecord)
+      check(Gen.setOf(topicWithRecords)) { topicsWithRecords =>
+        for {
+          expected <- ZIO.foreach(topicsWithRecords) { case (topic, records) =>
+            val topicName = TopicName(topic.name)
+            for {
+              _ <- ZIO.debug(s"creating topic: $topicName")
+              _ <- KafkaUtils.createTopic(topic)
+              recordCount <- ZIO.foldLeft(records)(0) { case (acc, record) =>
+                KafkaUtils
+                  .produce(
+                    topic = topicName,
+                    key = record.key,
+                    value = record.value
+                  )
+                  .as(acc + 1)
+              }
+            } yield Info.Size(topicName, TopicSize(recordCount))
+          }
+          actual <- ZStream
+            .serviceWithStream[KafkaService](
+              _.streamInfos
+            )
+            .runCollect
+        } yield assert(actual)(hasSubset(expected))
+      }
+    }
+  )
+
   override def spec = suite("KafkaService")(
     suite("not shared kafka")(
       listTopicsSpec,
       getTopicSizeSpec,
-      brokerCountSpec
+      brokerCountSpec,
+      infoSpec
     ).provide(
       KafkaTestContainer.kafkaLayer,
       KafkaServiceLive.layer,

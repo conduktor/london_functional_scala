@@ -40,6 +40,12 @@ object KafkaUtils {
     )
     .orDie
 
+  def createTopic(newTopic: NewTopic): URIO[AdminClient, Unit] = ZIO
+    .serviceWithZIO[AdminClient](
+      _.createTopic(newTopic)
+    )
+    .orDie
+
   val producerLayer =
     ZLayer.scoped {
       ZIO

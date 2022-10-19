@@ -3,6 +3,7 @@ package io.conduktor
 import io.conduktor.KafkaService._
 import zio.kafka.admin.AdminClient
 import zio.kafka.admin.AdminClient.{Node, OffsetSpec, TopicPartitionInfo}
+import zio.stream.ZStream
 import zio.{Task, ZIO, ZLayer}
 
 trait KafkaService {
@@ -26,10 +27,19 @@ trait KafkaService {
 
   def recordCount(topicName: TopicName): Task[RecordCount]
 
+  def streamInfos: ZStream[Any, Throwable, Info]
+
   def topicSpread(topicName: TopicName): Task[TopicSpread]
 }
 
 object KafkaService {
+
+  sealed trait Info
+  object Info {
+    case class Topics(topics: Seq[TopicName]) extends Info
+    case class Size(topicName: TopicName, size: TopicSize) extends Info
+  }
+
   case class TopicName(value: String) extends AnyVal
 
   case class Partition(value: Int) extends AnyVal
@@ -154,11 +164,11 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
 
   override def topicSpread(topicName: TopicName): Task[TopicSpread] =
     for {
-      numBrokers <- getBrokerIds.map(_.length)
+      numBrokers <- brokerCount
       numReplicas <- describeTopics(Seq(topicName)).map(topics =>
         topics.head._2.partition.values.flatMap(_.aliveReplicas).toSet.size
       )
-    } yield TopicSpread(numBrokers / numReplicas)
+    } yield TopicSpread(numBrokers.value.toDouble / numReplicas.toDouble)
 
   private def offsets(
       topicPartition: Seq[TopicPartition],
@@ -185,8 +195,8 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
     offsets(topicPartitions, OffsetSpec.LatestSpec)
 
   override def brokerCount: Task[BrokerCount] =
-    adminClient.describeClusterNodes().map { nodes =>
-      BrokerCount(nodes.length)
+    getBrokerIds.map { brokerId =>
+      BrokerCount(brokerId.length)
     }
 
   override def recordCount(
@@ -212,6 +222,13 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
           )
         )
       )
+
+  def streamInfos: ZStream[Any, Throwable, Info] = ZStream.unwrap(for {
+    names <- listTopicNames.map { topicNames => Info.Topics(topicNames) }
+    size <- getTopicSize
+  } yield ZStream[Info](names) ++ ZStream.fromIterable(size.map {
+    case (name, size) => Info.Size(name, size)
+  }))
 }
 
 object KafkaServiceLive {
