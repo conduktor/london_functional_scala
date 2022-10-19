@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (Html, text)
-import HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadReplicationFactor, loadSizes)
+import HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadReplicationFactor, loadSizes, loadSpread)
 import Table exposing (..)
 import Model exposing (..)
 
@@ -34,13 +34,14 @@ update msg model =
       case result of
         Ok topicNames ->
           let _ = Debug.log "topic names " topicNames in
-            (Started (topicNamesToTopicInfos topicNames),
+            (Started (List.map topicNameToTopicInfo topicNames),
               Cmd.batch (
                 List.concat
                   [ [Cmd.map HttpMessage (loadSizes topicNames)]
                   , (List.map (Cmd.map HttpMessage << loadRecordCount) topicNames)
                   , (List.map (Cmd.map HttpMessage << loadPartitionCount) topicNames)
                   , (List.map (Cmd.map HttpMessage << loadReplicationFactor) topicNames)
+                  , (List.map (Cmd.map HttpMessage << loadSpread) topicNames)
                   ]
               )
             )
@@ -92,6 +93,16 @@ update msg model =
           (Failure, Cmd.none)
 
     (HttpMessage (GotReplicationFactor _), LoadingNames) ->
+       (Failure, Cmd.none) -- FIXME error case
+
+    (HttpMessage (GotSpread result), Started topicInfos) ->
+      case result of
+        Ok (topicName, spread) ->
+          (Started (applySpread spread topicName topicInfos), Cmd.none)
+        Err _ ->
+          (Failure, Cmd.none)
+
+    (HttpMessage (GotSpread _), LoadingNames) ->
        (Failure, Cmd.none) -- FIXME error case
 
 

@@ -11,11 +11,11 @@ import io.conduktor.KafkaService.{
   PartitionInfo,
   RecordCount,
   ReplicationFactor,
+  Spread,
   TopicDescription,
   TopicName,
   TopicPartition,
-  TopicSize,
-  TopicSpread
+  TopicSize
 }
 import sttp.tapir.{Endpoint, Schema, Validator}
 import sttp.tapir.generic.auto.schemaForCaseClass
@@ -99,7 +99,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       .in(path[TopicName]("topicName"))
       .in("spread")
       .errorOut(jsonBody[ErrorInfo])
-      .out(jsonBody[TopicSpread])
+      .out(jsonBody[Spread])
       .zServerLogic { case (topicName) =>
         kafkaService.topicSpread(topicName).handleError
       }

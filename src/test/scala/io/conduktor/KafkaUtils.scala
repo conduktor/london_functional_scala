@@ -40,6 +40,12 @@ object KafkaUtils {
     )
     .orDie
 
+  def createTopic(newTopic: NewTopic): URIO[AdminClient, Unit] = ZIO
+    .serviceWithZIO[AdminClient](
+      _.createTopic(newTopic)
+    )
+    .orDie
+
   val producerLayer =
     ZLayer.scoped {
       ZIO
@@ -50,8 +56,8 @@ object KafkaUtils {
     }
 
   val adminClientSettingsLayer = ZLayer {
-    ZIO.serviceWith[KafkaContainer](container =>
+    ZIO.serviceWith[KafkaContainer] { container =>
       AdminClientSettings(container.bootstrapServers :: Nil)
-    )
+    }
   }
 }

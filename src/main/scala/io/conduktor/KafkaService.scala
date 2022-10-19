@@ -3,33 +3,56 @@ package io.conduktor
 import io.conduktor.KafkaService._
 import zio.kafka.admin.AdminClient
 import zio.kafka.admin.AdminClient.{Node, OffsetSpec, TopicPartitionInfo}
+import zio.stream.ZStream
 import zio.{Task, ZIO, ZLayer}
 
 trait KafkaService {
   def listTopicNames: Task[Seq[TopicName]]
 
   def describeTopics(
-      topicNames: Seq[TopicName]
-  ): Task[Map[TopicName, TopicDescription]]
+                      topicNames: Seq[TopicName]
+                    ): Task[Map[TopicName, TopicDescription]]
 
   def getTopicSize: Task[Map[TopicName, TopicSize]]
 
   def beginningOffsets(
-      topicPartitions: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]]
+                        topicPartitions: Seq[TopicPartition]
+                      ): Task[Map[TopicPartition, Offset]]
 
   def endOffsets(
-      topicPartitions: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]]
+                  topicPartitions: Seq[TopicPartition]
+                ): Task[Map[TopicPartition, Offset]]
 
   def brokerCount: Task[BrokerCount]
 
   def recordCount(topicName: TopicName): Task[RecordCount]
 
-  def topicSpread(topicName: TopicName): Task[TopicSpread]
+  def streamInfos: ZStream[Any, Throwable, Info]
+
+  def topicSpread(topicName: TopicName): Task[Spread]
 }
 
 object KafkaService {
+
+  sealed trait Info
+  object Info {
+    case class Topics(topics: Seq[TopicName]) extends Info
+    case class Size(topicName: TopicName, size: TopicSize) extends Info
+
+    case class RecordCountInfo(topicName: TopicName, count: RecordCount)
+        extends Info
+
+    case class PartitionInfo(topicName: TopicName, partition: Partition)
+        extends Info
+
+    case class ReplicationFactorInfo(
+        topicName: TopicName,
+        replicationFactor: ReplicationFactor
+    ) extends Info
+
+    case class SpreadInfo(topicName: TopicName, spread: Spread) extends Info
+  }
+
   case class TopicName(value: String) extends AnyVal
 
   case class Partition(value: Int) extends AnyVal
@@ -48,7 +71,6 @@ object KafkaService {
   }
 
   case class RecordCount(value: Long) extends AnyVal
-  case class TopicSpread(value: Double) extends AnyVal
 
   case class ReplicationFactor(value: Int) extends AnyVal
 
@@ -111,8 +133,8 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
   override def describeTopics(
-      topicNames: Seq[TopicName]
-  ): Task[Map[TopicName, TopicDescription]] = {
+                               topicNames: Seq[TopicName]
+                             ): Task[Map[TopicName, TopicDescription]] = {
     adminClient
       .describeTopics(topicNames.map(_.value))
       .map(topicDescription =>
@@ -152,18 +174,18 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
         case (_, size) => size
       } { _ + _ }
 
-  override def topicSpread(topicName: TopicName): Task[TopicSpread] =
+  override def topicSpread(topicName: TopicName): Task[Spread] =
     for {
-      numBrokers <- getBrokerIds.map(_.length)
+      numBrokers <- brokerCount
       numReplicas <- describeTopics(Seq(topicName)).map(topics =>
         topics.head._2.partition.values.flatMap(_.aliveReplicas).toSet.size
       )
-    } yield TopicSpread(numBrokers / numReplicas)
+    } yield Spread(numBrokers.value.toDouble / numReplicas.toDouble)
 
   private def offsets(
-      topicPartition: Seq[TopicPartition],
-      offsetSpec: OffsetSpec
-  ): Task[Map[TopicPartition, Offset]] =
+                       topicPartition: Seq[TopicPartition],
+                       offsetSpec: OffsetSpec
+                     ): Task[Map[TopicPartition, Offset]] =
     adminClient
       .listOffsets(topicPartition.map { topicPartition =>
         topicPartition.toZioKafka -> offsetSpec
@@ -175,23 +197,23 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       }
 
   override def beginningOffsets(
-      topicPartitions: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]] =
+                                 topicPartitions: Seq[TopicPartition]
+                               ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartitions, OffsetSpec.EarliestSpec)
 
   override def endOffsets(
-      topicPartitions: Seq[TopicPartition]
-  ): Task[Map[TopicPartition, Offset]] =
+                           topicPartitions: Seq[TopicPartition]
+                         ): Task[Map[TopicPartition, Offset]] =
     offsets(topicPartitions, OffsetSpec.LatestSpec)
 
   override def brokerCount: Task[BrokerCount] =
-    adminClient.describeClusterNodes().map { nodes =>
-      BrokerCount(nodes.length)
+    getBrokerIds.map { brokerId =>
+      BrokerCount(brokerId.length)
     }
 
   override def recordCount(
-      topicName: TopicName
-  ): Task[RecordCount] =
+                            topicName: TopicName
+                          ): Task[RecordCount] =
     describeTopics(List(topicName))
       .map(_.values.headOption)
       .flatMap(
@@ -212,6 +234,43 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
           )
         )
       )
+
+  def streamInfos: ZStream[Any, Throwable, Info] = ZStream.unwrap(
+    for {
+      names <- listTopicNames.map { topicNames => Info.Topics(topicNames) }
+      size <- getTopicSize
+      brokerCount <- brokerCount
+    } yield ZStream[Info](names) ++ ZStream.fromIterable(size.map {
+      case (name, size) => Info.Size(name, size)
+    }) ++ ZStream.fromIterable(names.topics).mapZIO { name =>
+      recordCount(name).map(Info.RecordCountInfo(name, _))
+    } ++ ZStream
+      .fromIterable(names.topics)
+      .grouped(30)
+      .mapConcatZIO { names =>
+        describeTopics(names).map { result =>
+          result.toList.flatMap { case (topicName, desc) =>
+            List(
+              Info.PartitionInfo(topicName, Partition(desc.partition.size)),
+              Info.ReplicationFactorInfo(
+                topicName,
+                replicationFactor = desc.replicationFactor
+              ),
+              Info.SpreadInfo(
+                topicName,
+                Spread(
+                  desc.partition
+                    .flatMap(_._2.aliveReplicas)
+                    .toSet
+                    .size
+                    .toDouble / brokerCount.value
+                )
+              )
+            )
+          }
+        }
+      }
+  )
 }
 
 object KafkaServiceLive {
