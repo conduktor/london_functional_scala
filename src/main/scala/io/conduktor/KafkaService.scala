@@ -27,29 +27,11 @@ trait KafkaService {
 
   def recordCount(topicName: TopicName): Task[RecordCount]
 
-  def streamInfos: ZStream[Any, Throwable, Info]
-
   def topicSpread(topicName: TopicName): Task[Spread]
 }
 
 object KafkaService {
 
-  sealed trait Info
-  object Info {
-    case class Topics(topics: Seq[TopicName])              extends Info
-    case class Size(topicName: TopicName, size: TopicSize) extends Info
-
-    case class RecordCountInfo(topicName: TopicName, count: RecordCount) extends Info
-
-    case class PartitionInfo(topicName: TopicName, partition: Partition) extends Info
-
-    case class ReplicationFactorInfo(
-      topicName: TopicName,
-      replicationFactor: ReplicationFactor,
-    ) extends Info
-
-    case class SpreadInfo(topicName: TopicName, spread: Spread) extends Info
-  }
 
   case class TopicName(value: String) extends AnyVal
 
@@ -230,42 +212,6 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
         )
       )
 
-  def streamInfos: ZStream[Any, Throwable, Info] = ZStream.unwrap(
-    for {
-      names       <- listTopicNames.map(topicNames => Info.Topics(topicNames))
-      size        <- getTopicSize
-      brokerCount <- brokerCount
-    } yield ZStream[Info](names) ++ ZStream.fromIterable(size.map { case (name, size) =>
-      Info.Size(name, size)
-    }) ++ ZStream.fromIterable(names.topics).mapZIO { name =>
-      recordCount(name).map(Info.RecordCountInfo(name, _))
-    } ++ ZStream
-      .fromIterable(names.topics)
-      .grouped(30)
-      .mapConcatZIO { names =>
-        describeTopics(names).map { result =>
-          result.toList.flatMap { case (topicName, desc) =>
-            List(
-              Info.PartitionInfo(topicName, Partition(desc.partition.size)),
-              Info.ReplicationFactorInfo(
-                topicName,
-                replicationFactor = desc.replicationFactor,
-              ),
-              Info.SpreadInfo(
-                topicName,
-                Spread(
-                  desc.partition
-                    .flatMap(_._2.aliveReplicas)
-                    .toSet
-                    .size
-                    .toDouble / brokerCount.value
-                ),
-              ),
-            )
-          }
-        }
-      }
-  )
 }
 
 object KafkaServiceLive {
