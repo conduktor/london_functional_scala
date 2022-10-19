@@ -341,39 +341,46 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     },
     test("should return size of topics - property") {
       val topicWithRecords = anyTopic <*> Gen.setOf(anyRecord)
-      check(Gen.setOf(topicWithRecords)) { topicsWithRecords =>
-        for {
-          expected <- ZIO.foreach(topicsWithRecords) { case (topic, records) =>
-            val topicName = TopicName(topic.name)
-            for {
-              _ <- ZIO.debug(s"creating topic: $topicName")
-              _ <- KafkaUtils.createTopic(topic)
-              recordCount <- ZIO.foldLeft(records)(0) { case (acc, record) =>
-                KafkaUtils
-                  .produce(
-                    topic = topicName,
-                    key = record.key,
-                    value = record.value
-                  )
-                  .as(acc + 1)
-              }
-            } yield Info.Size(topicName, TopicSize(recordCount))
-          }
-          actual <- ZStream
-            .serviceWithStream[KafkaService](
-              _.streamInfos
-            )
-            .runCollect
-        } yield assert(actual)(hasSubset(expected))
+      Ref.make(0).flatMap { topicPrefix =>
+        check(Gen.setOf(topicWithRecords)) { topicsWithRecords =>
+          for {
+            expected <- ZIO.foreach(topicsWithRecords) {
+              case (topic, records) =>
+                for {
+                  topicName <- topicPrefix.getAndUpdate(_ + 1).map { prec =>
+                    TopicName(s"$prec${topic.name}")
+                  }
+                  _ <- ZIO.debug(s"creating topic: $topicName")
+                  _ <- KafkaUtils.createTopic(topicName)
+                  recordCount <- ZIO.foldLeft(records)(0) {
+                    case (acc, record) =>
+                      KafkaUtils
+                        .produce(
+                          topic = topicName,
+                          key = record.key,
+                          value = record.value
+                        )
+                        .as(acc + 1)
+                  }
+                } yield Info.Size(topicName, TopicSize(recordCount))
+            }
+            actual <- ZStream
+              .serviceWithStream[KafkaService](
+                _.streamInfos
+              )
+              .runCollect
+          } yield assert(actual)(hasSubset(expected))
+        }
       }
     }
   )
 
+
   override def spec = suite("KafkaService")(
     suite("not shared kafka")(
-      listTopicsSpec,
+      /*listTopicsSpec,
       getTopicSizeSpec,
-      brokerCountSpec,
+      brokerCountSpec,*/
       infoSpec
     ).provide(
       KafkaTestContainer.kafkaLayer,
@@ -387,8 +394,7 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       describeTopicsSpec,
       beginningOffsetsSpec,
       endOffsetsSpec,
-      brokerCountSpec,
-      spreadSpec
+      brokerCountSpec
     )
       .provideShared(
         KafkaTestContainer.kafkaLayer,

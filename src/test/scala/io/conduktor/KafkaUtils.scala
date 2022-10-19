@@ -56,8 +56,8 @@ object KafkaUtils {
     }
 
   val adminClientSettingsLayer = ZLayer {
-    ZIO.serviceWith[KafkaContainer](container =>
+    ZIO.serviceWith[KafkaContainer] { container =>
       AdminClientSettings(container.bootstrapServers :: Nil)
-    )
+    }
   }
 }
