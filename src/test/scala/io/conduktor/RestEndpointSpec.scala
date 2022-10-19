@@ -15,9 +15,7 @@ import zhttp.http.Status.BadRequest
 
 object RestEndpointSpec extends ZIOSpecDefault {
   implicit class HttpDataExtension(httpData: HttpData) {
-    def toJson: Task[Json] = httpData.toByteBuf.map(buffer =>
-      parse(buffer.toString(Charset.forName("utf-8"))).toOption.get
-    )
+    def toJson: Task[Json] = httpData.toByteBuf.map(buffer => parse(buffer.toString(Charset.forName("utf-8"))).toOption.get)
   }
   implicit val topicNameEncoder: Encoder[TopicName] =
     Encoder.encodeString.contramap[TopicName](_.value)
@@ -26,9 +24,9 @@ object RestEndpointSpec extends ZIOSpecDefault {
     test("should return topic name") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(Request(url = URL(!! / "names")))
+        _            <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(Request(url = URL(!! / "names")))
         responseBody <- response.data.toJson
       } yield assertTrue(responseBody == json"[$topicName]")
     }
@@ -39,18 +37,18 @@ object RestEndpointSpec extends ZIOSpecDefault {
       val topicOne = TopicName("one")
       val topicTwo = TopicName("two")
       for {
-        _ <- KafkaUtils.createTopic(topicOne, numPartition = 1)
-        _ <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(
-          Request(url =
-            URL(!! / "describe").setQueryParams(
-              Map("topicNames" -> List(topicOne, topicTwo).map(_.value))
-            )
-          )
-        )
+        _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
+        _            <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(
+                          Request(url =
+                            URL(!! / "describe").setQueryParams(
+                              Map("topicNames" -> List(topicOne, topicTwo).map(_.value))
+                            )
+                          )
+                        )
         responseBody <- response.data.toJson
-        _ <- ZIO.debug(responseBody.printWith(Printer.spaces2))
+        _            <- ZIO.debug(responseBody.printWith(Printer.spaces2))
       } yield assertTrue(
         responseBody ==
           json"""{
@@ -92,11 +90,11 @@ object RestEndpointSpec extends ZIOSpecDefault {
       val topicOne = TopicName("one")
       val topicTwo = TopicName("two")
       for {
-        _ <- KafkaUtils.createTopic(topicOne, numPartition = 1)
-        _ <- KafkaUtils.createTopic(topicTwo, numPartition = 1)
-        _ <- KafkaUtils.produce(topicOne, "k", "v")
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(Request(url = URL(!! / "size")))
+        _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
+        _            <- KafkaUtils.createTopic(topicTwo, numPartition = 1)
+        _            <- KafkaUtils.produce(topicOne, "k", "v")
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(Request(url = URL(!! / "size")))
         responseBody <- response.data.toJson
       } yield assertTrue(
         responseBody ==
@@ -110,36 +108,36 @@ object RestEndpointSpec extends ZIOSpecDefault {
       val topicOne = TopicName("one")
       val topicTwo = TopicName("two")
       for {
-        _ <- KafkaUtils.createTopic(topicOne, numPartition = 1)
-        _ <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
+        _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
+        _            <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
         //TODO: maybe find a way to make one of the partition not starting at offset 0°
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(
-          Request(
-            url = URL(!! / "offsets" / "begin"),
-            method = Method.GET,
-            data = HttpData.fromString(
-              json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
-              Charset.forName("utf-8")
-            )
-          )
-        )
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(
+                          Request(
+                            url = URL(!! / "offsets" / "begin"),
+                            method = Method.GET,
+                            data = HttpData.fromString(
+                              json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
+                              Charset.forName("utf-8"),
+                            ),
+                          )
+                        )
         //TODO: go for prettier solution
         responseBody <- response.data.toJson.map { json =>
-          json.mapArray(
-            _.sortBy { json =>
-              val topicName = json.hcursor
-                .get[String]("topicName")
-                .getOrElse("")
-              val partition = json.hcursor
-                .get[Int](
-                  "partition"
-                )
-                .getOrElse(0)
-              topicName -> partition
-            }
-          )
-        }
+                          json.mapArray(
+                            _.sortBy { json =>
+                              val topicName = json.hcursor
+                                .get[String]("topicName")
+                                .getOrElse("")
+                              val partition = json.hcursor
+                                .get[Int](
+                                  "partition"
+                                )
+                                .getOrElse(0)
+                              topicName -> partition
+                            }
+                          )
+                        }
       } yield assertTrue(
         responseBody ==
           json"""[{"topicName": "one", "partition": 0, "offset": 0}, {"topicName": "two", "partition": 0, "offset": 0},
@@ -153,99 +151,99 @@ object RestEndpointSpec extends ZIOSpecDefault {
       test("should return replication factor for a topic") {
         val topicName = TopicName("one")
         for {
-          _ <- KafkaUtils.createTopic(
-            topicName,
-            numPartition = 1,
-            replicationFactor = 1
-          )
-          app <- ZIO.service[RestEndpoints].map(_.app)
-          response <- app(
-            Request(
-              url = URL(!! / "topics" / topicName.value / "replicationFactor"),
-              method = Method.GET
-            )
-          )
+          _            <- KafkaUtils.createTopic(
+                            topicName,
+                            numPartition = 1,
+                            replicationFactor = 1,
+                          )
+          app          <- ZIO.service[RestEndpoints].map(_.app)
+          response     <- app(
+                            Request(
+                              url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+                              method = Method.GET,
+                            )
+                          )
           responseBody <- response.data.toJson
         } yield assertTrue(responseBody == json"1")
       },
       test("should return 404 for replication factor on unknown topic") {
         val topicName = TopicName("one")
         for {
-          app <- ZIO.service[RestEndpoints].map(_.app)
+          app      <- ZIO.service[RestEndpoints].map(_.app)
           response <- app(
-            Request(
-              url = URL(!! / "topics" / topicName.value / "replicationFactor"),
-              method = Method.GET
-            )
-          )
+                        Request(
+                          url = URL(!! / "topics" / topicName.value / "replicationFactor"),
+                          method = Method.GET,
+                        )
+                      )
         } yield assertTrue(
           response.status == Status.BadRequest
         ) //TODO: change to notfound
-      }
+      },
     )
 
   private val spreadSpec = suite("/topics/{topic}/spread")(
     test("should return spread size") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(
-          topicName,
-          numPartition = 1,
-          replicationFactor = 1
-        )
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "spread"),
-            method = Method.GET
-          )
-        )
+        _            <- KafkaUtils.createTopic(
+                          topicName,
+                          numPartition = 1,
+                          replicationFactor = 1,
+                        )
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(
+                          Request(
+                            url = URL(!! / "topics" / topicName.value / "spread"),
+                            method = Method.GET,
+                          )
+                        )
         responseBody <- response.data.toJson
       } yield assertTrue(responseBody == json"1.0")
     },
     test("should return 404 for unknown topic") {
       val topicName = TopicName("jenexistepas")
       for {
-        app <- ZIO.service[RestEndpoints].map(_.app)
+        app      <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "spread"),
-            method = Method.GET
-          )
-        )
+                      Request(
+                        url = URL(!! / "topics" / topicName.value / "spread"),
+                        method = Method.GET,
+                      )
+                    )
       } yield assertTrue(
         response.status == Status.BadRequest
       ) //TODO: change to notfound
-    }
+    },
   )
 
   private val partitionCountSpec = suite("/topics/{topic}/partitions")(
     test("should return partition count for fields=count query param") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 5)
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "partitions")
-              .setQueryParams("fields=count"),
-            method = Method.GET
-          )
-        )
+        _            <- KafkaUtils.createTopic(topicName, numPartition = 5)
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(
+                          Request(
+                            url = URL(!! / "topics" / topicName.value / "partitions")
+                              .setQueryParams("fields=count"),
+                            method = Method.GET,
+                          )
+                        )
         responseBody <- response.data.toJson
       } yield assertTrue(responseBody == json"5")
     },
     test("should return 404 for replication factor on unknown topic") {
       val topicName = TopicName("one")
       for {
-        app <- ZIO.service[RestEndpoints].map(_.app)
+        app      <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "partitions")
-              .setQueryParams("fields=count"),
-            method = Method.GET
-          )
-        )
+                      Request(
+                        url = URL(!! / "topics" / topicName.value / "partitions")
+                          .setQueryParams("fields=count"),
+                        method = Method.GET,
+                      )
+                    )
       } yield assertTrue(
         response.status == Status.BadRequest
       ) //TODO: change to notfound
@@ -253,70 +251,70 @@ object RestEndpointSpec extends ZIOSpecDefault {
     test("should fail when retrieving anything but count field") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 4)
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        app <- ZIO.service[RestEndpoints].map(_.app)
+        _        <- KafkaUtils.createTopic(topicName, numPartition = 4)
+        _        <- KafkaUtils.produce(topicName, "k", "v")
+        _        <- KafkaUtils.produce(topicName, "k", "v")
+        app      <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "partitions")
-              .setQueryParams("fields=payload"),
-            method = Method.GET
-          )
-        )
+                      Request(
+                        url = URL(!! / "topics" / topicName.value / "partitions")
+                          .setQueryParams("fields=payload"),
+                        method = Method.GET,
+                      )
+                    )
       } yield assertTrue(response.status == BadRequest)
-    }
+    },
   )
 
   private val recordCountSpec = suite("/topics/{topic}/records")(
     test("should return topic record count for fields=count query param") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "records")
-              .setQueryParams("fields=count"),
-            method = Method.GET
-          )
-        )
+        _            <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        _            <- KafkaUtils.produce(topicName, "k", "v")
+        _            <- KafkaUtils.produce(topicName, "k", "v")
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(
+                          Request(
+                            url = URL(!! / "topics" / topicName.value / "records")
+                              .setQueryParams("fields=count"),
+                            method = Method.GET,
+                          )
+                        )
         responseBody <- response.data.toJson
       } yield assertTrue(responseBody == json"2")
     },
     test("should fail when retrieving records") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        app <- ZIO.service[RestEndpoints].map(_.app)
+        _        <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        _        <- KafkaUtils.produce(topicName, "k", "v")
+        _        <- KafkaUtils.produce(topicName, "k", "v")
+        app      <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "records"),
-            method = Method.GET
-          )
-        )
+                      Request(
+                        url = URL(!! / "topics" / topicName.value / "records"),
+                        method = Method.GET,
+                      )
+                    )
       } yield assertTrue(response.status == BadRequest)
     },
     test("should fail when retrieving anything but count field") {
       val topicName = TopicName("one")
       for {
-        _ <- KafkaUtils.createTopic(topicName, numPartition = 1)
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        _ <- KafkaUtils.produce(topicName, "k", "v")
-        app <- ZIO.service[RestEndpoints].map(_.app)
+        _        <- KafkaUtils.createTopic(topicName, numPartition = 1)
+        _        <- KafkaUtils.produce(topicName, "k", "v")
+        _        <- KafkaUtils.produce(topicName, "k", "v")
+        app      <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
-          Request(
-            url = URL(!! / "topics" / topicName.value / "records")
-              .setQueryParams("fields=payload"),
-            method = Method.GET
-          )
-        )
+                      Request(
+                        url = URL(!! / "topics" / topicName.value / "records")
+                          .setQueryParams("fields=payload"),
+                        method = Method.GET,
+                      )
+                    )
       } yield assertTrue(response.status == BadRequest)
-    }
+    },
   )
 
   private val endOffsetSpec = suite("/offsets/end")(
@@ -324,36 +322,36 @@ object RestEndpointSpec extends ZIOSpecDefault {
       val topicOne = TopicName("one")
       val topicTwo = TopicName("two")
       for {
-        _ <- KafkaUtils.createTopic(topicOne, numPartition = 1)
-        _ <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
-        _ <- KafkaUtils.produce(topicOne, "k", "v")
-        app <- ZIO.service[RestEndpoints].map(_.app)
-        response <- app(
-          Request(
-            url = URL(!! / "offsets" / "end"),
-            method = Method.GET,
-            data = HttpData.fromString(
-              json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
-              Charset.forName("utf-8")
-            )
-          )
-        )
+        _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
+        _            <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
+        _            <- KafkaUtils.produce(topicOne, "k", "v")
+        app          <- ZIO.service[RestEndpoints].map(_.app)
+        response     <- app(
+                          Request(
+                            url = URL(!! / "offsets" / "end"),
+                            method = Method.GET,
+                            data = HttpData.fromString(
+                              json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
+                              Charset.forName("utf-8"),
+                            ),
+                          )
+                        )
         //TODO: go for prettier solution
         responseBody <- response.data.toJson.map { json =>
-          json.mapArray(
-            _.sortBy { json =>
-              val topicName = json.hcursor
-                .get[String]("topicName")
-                .getOrElse("")
-              val partition = json.hcursor
-                .get[Int](
-                  "partition"
-                )
-                .getOrElse(0)
-              topicName -> partition
-            }
-          )
-        }
+                          json.mapArray(
+                            _.sortBy { json =>
+                              val topicName = json.hcursor
+                                .get[String]("topicName")
+                                .getOrElse("")
+                              val partition = json.hcursor
+                                .get[Int](
+                                  "partition"
+                                )
+                                .getOrElse(0)
+                              topicName -> partition
+                            }
+                          )
+                        }
       } yield assertTrue(
         responseBody ==
           json"""[{"topicName": "one", "partition": 0, "offset": 1}, {"topicName": "two", "partition": 0, "offset": 0},
@@ -372,7 +370,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
       recordCountSpec,
       replicationFactorSpec,
       partitionCountSpec,
-      spreadSpec
+      spreadSpec,
     )
       .provide(
         RestEndpointsLive.layer,
@@ -380,6 +378,6 @@ object RestEndpointSpec extends ZIOSpecDefault {
         KafkaServiceLive.layer,
         AdminClient.live,
         KafkaUtils.adminClientSettingsLayer,
-        KafkaUtils.producerLayer
+        KafkaUtils.producerLayer,
       )
 }

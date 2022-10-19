@@ -15,7 +15,7 @@ import io.conduktor.KafkaService.{
   TopicDescription,
   TopicName,
   TopicPartition,
-  TopicSize
+  TopicSize,
 }
 import sttp.tapir.{Endpoint, Schema, Validator}
 import sttp.tapir.generic.auto.schemaForCaseClass
@@ -44,7 +44,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
           ZIO
             .logErrorCause(
               throwable.getMessage,
-              Cause.fail(throwable)
+              Cause.fail(throwable),
             )
             .as(ErrorInfo(throwable.getMessage))
         }
@@ -61,8 +61,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
   implicit val partitionMapSchema: Schema[Map[Partition, PartitionInfo]] =
     Schema.schemaForMap(_.toString)
 
-  implicit val topicDescriptionMapSchema
-      : Schema[Map[TopicName, TopicDescription]] =
+  implicit val topicDescriptionMapSchema: Schema[Map[TopicName, TopicDescription]] =
     Schema.schemaForMap(_.value)
 
   implicit val topicSizeMapSchema: Schema[Map[TopicName, TopicSize]] =
@@ -114,7 +113,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       .zServerLogic(topicName =>
         kafkaService
           .describeTopics(Seq(topicName))
-          .map(_.map { result => result._2.replicationFactor }.head)
+          .map(_.map(result => result._2.replicationFactor).head)
           .handleError
       )
 
@@ -148,9 +147,9 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       }
 
   case class TopicOffsets(
-      topicName: TopicName,
-      partition: Partition,
-      offset: Offset
+    topicName: TopicName,
+    partition: Partition,
+    offset: Offset,
   )
 
   implicit val topicOffsets: Codec[TopicOffsets] = deriveCodec[TopicOffsets]
@@ -195,7 +194,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         anyOrigin = true,
         anyMethod = true,
         allowedOrigins = s => s.equals("localhost"),
-        allowedMethods = Some(Set(Method.GET, Method.POST, Method.PUT))
+        allowedMethods = Some(Set(Method.GET, Method.POST, Method.PUT)),
       )
 
     ZioHttpInterpreter().toHttp(
@@ -208,7 +207,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         recordCount,
         replicationFactor,
         spread,
-        partitionCount
+        partitionCount,
       )
     ) @@ Middleware
       .cors(config)
