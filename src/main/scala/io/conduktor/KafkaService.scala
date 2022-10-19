@@ -26,6 +26,7 @@ trait KafkaService {
 
   def recordCount(topicName: TopicName): Task[RecordCount]
 
+  def topicSpread(topicName: TopicName): Task[TopicSpread]
 }
 
 object KafkaService {
@@ -47,6 +48,7 @@ object KafkaService {
   }
 
   case class RecordCount(value: Long) extends AnyVal
+  case class TopicSpread(value: Double) extends AnyVal
 
   case class ReplicationFactor(value: Int) extends AnyVal
 
@@ -92,7 +94,9 @@ object KafkaService {
         topicDescription.partitions.map { partition =>
           Partition(partition.partition) -> PartitionInfo.from(partition)
         }.toMap,
-        ReplicationFactor(topicDescription.partitions.map(_.replicas.length).head)
+        ReplicationFactor(
+          topicDescription.partitions.map(_.replicas.length).head
+        )
       ) //TODO: rework head?
 
   }
@@ -132,9 +136,11 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
     }
   }
 
+  private val getBrokerIds = adminClient.describeClusterNodes().map(_.map(_.id))
+
   override def getTopicSize: Task[Map[TopicName, TopicSize]] =
     for {
-      brokerIds <- adminClient.describeClusterNodes().map(_.map(_.id))
+      brokerIds <- getBrokerIds
       description <- adminClient.describeLogDirs(brokerIds)
     } yield description.values.flatten
       .flatMapValues(_.replicaInfos)
@@ -145,6 +151,14 @@ class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
       .groupMapReduce { case (topicPartition, _) => topicPartition.topicName } {
         case (_, size) => size
       } { _ + _ }
+
+  override def topicSpread(topicName: TopicName): Task[TopicSpread] =
+    for {
+      numBrokers <- getBrokerIds.map(_.length)
+      numReplicas <- describeTopics(Seq(topicName)).map(topics =>
+        topics.head._2.partition.values.flatMap(_.aliveReplicas).toSet.size
+      )
+    } yield TopicSpread(numBrokers / numReplicas)
 
   private def offsets(
       topicPartition: Seq[TopicPartition],

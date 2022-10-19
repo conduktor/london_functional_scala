@@ -2,7 +2,20 @@ package io.conduktor
 
 import io.circe.generic.semiauto.deriveCodec
 import io.circe.{Codec, Decoder, Encoder, KeyDecoder, KeyEncoder}
-import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionCount, PartitionInfo, RecordCount, ReplicationFactor, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService.{
+  BrokerId,
+  Offset,
+  Partition,
+  PartitionCount,
+  PartitionInfo,
+  RecordCount,
+  ReplicationFactor,
+  TopicDescription,
+  TopicName,
+  TopicPartition,
+  TopicSize,
+  TopicSpread
+}
 
 object CirceCodec {
   implicit val partition: Codec[Partition] = Codec
@@ -24,6 +37,10 @@ object CirceCodec {
   implicit val recordCountCodec: Codec[RecordCount] = Codec
     .from(Decoder.decodeLong, Encoder.encodeLong)
     .iemap(anLong => Right(RecordCount(anLong)))(_.value)
+
+  implicit val topicSpread: Codec[TopicSpread] = Codec
+    .from(Decoder.decodeDouble, Encoder.encodeDouble)
+    .iemap(aDouble => Right(TopicSpread(aDouble)))(_.value)
 
   implicit val topicNameCodec: Codec[TopicName] =
     Codec
@@ -50,7 +67,6 @@ object CirceCodec {
 
   implicit val topicDescription: Codec[TopicDescription] =
     deriveCodec[TopicDescription]
-
 
   implicit val replicationFactorCodec: Codec[ReplicationFactor] = Codec
     .from(Decoder.decodeInt, Encoder.encodeInt)

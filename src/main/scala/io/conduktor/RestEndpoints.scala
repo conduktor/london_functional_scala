@@ -3,7 +3,20 @@ package io.conduktor
 import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import io.conduktor.CirceCodec._
-import io.conduktor.KafkaService.{BrokerId, Offset, Partition, PartitionInfo, RecordCount, ReplicationFactor, TopicDescription, TopicName, TopicPartition, TopicSize, PartitionCount}
+import io.conduktor.KafkaService.{
+  BrokerId,
+  Offset,
+  Partition,
+  PartitionCount,
+  PartitionInfo,
+  RecordCount,
+  ReplicationFactor,
+  TopicDescription,
+  TopicName,
+  TopicPartition,
+  TopicSize,
+  TopicSpread
+}
 import sttp.tapir.{Endpoint, Schema, Validator}
 import sttp.tapir.generic.auto.schemaForCaseClass
 import sttp.tapir.json.circe.jsonBody
@@ -70,12 +83,25 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       .in("topics")
       .in(path[TopicName]("topicName"))
       .in("records")
-      .in(query[String]("fields")
-        .validate(Validator.enumeration("count" :: Nil)))
+      .in(
+        query[String]("fields")
+          .validate(Validator.enumeration("count" :: Nil))
+      )
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[RecordCount])
       .zServerLogic { case (topicName, fields) =>
         kafkaService.recordCount(topicName).handleError
+      }
+
+  val spread =
+    endpoint.get
+      .in("topics")
+      .in(path[TopicName]("topicName"))
+      .in("spread")
+      .errorOut(jsonBody[ErrorInfo])
+      .out(jsonBody[TopicSpread])
+      .zServerLogic { case (topicName) =>
+        kafkaService.topicSpread(topicName).handleError
       }
 
   val replicationFactor =
@@ -97,14 +123,18 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
       .in("topics")
       .in(path[TopicName]("topicName"))
       .in("partitions")
-      .in(query[String]("fields")
-        .validate(Validator.enumeration("count" :: Nil)))
+      .in(
+        query[String]("fields")
+          .validate(Validator.enumeration("count" :: Nil))
+      )
       .errorOut(jsonBody[ErrorInfo])
       .out(jsonBody[PartitionCount])
       .zServerLogic { case (topicName, _) =>
         kafkaService
           .describeTopics(Seq(topicName))
-          .map(_.map { result => PartitionCount(result._2.partition.size) }.head)
+          .map(_.map { result =>
+            PartitionCount(result._2.partition.size)
+          }.head)
           .handleError
       }
 
@@ -177,6 +207,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         endOffsets,
         recordCount,
         replicationFactor,
+        spread,
         partitionCount
       )
     ) @@ Middleware
