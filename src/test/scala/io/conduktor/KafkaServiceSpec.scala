@@ -7,7 +7,7 @@ import zio.kafka.admin.AdminClient
 import zio.kafka.admin.AdminClient.NewTopic
 import zio.stream.ZStream
 import zio.test.Assertion._
-import zio.test.TestAspect.{nondeterministic, samples, shrinks}
+import zio.test.TestAspect.{nondeterministic, samples, sequential, shrinks}
 import zio.test._
 
 object KafkaServiceSpec extends ZIOSpecDefault {
@@ -490,7 +490,6 @@ object KafkaServiceSpec extends ZIOSpecDefault {
     suite("not shared kafka")(
       listTopicsSpec,
       getTopicSizeSpec,
-      brokerCountSpec,
       infoSpec,
     ).provide(
       KafkaTestContainer.kafkaLayer,
@@ -498,8 +497,9 @@ object KafkaServiceSpec extends ZIOSpecDefault {
       AdminClient.live,
       KafkaUtils.adminClientSettingsLayer,
       KafkaUtils.producerLayer,
-    ),
+    ) @@ sequential,
     suite("shared kafka")(
+      brokerCountSpec,
       recordCountSpec,
       describeTopicsSpec,
       beginningOffsetsSpec,

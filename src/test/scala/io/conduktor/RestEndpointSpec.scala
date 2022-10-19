@@ -33,8 +33,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
 
   private val describeTopicSpec = suite("/describe")(
     test("should describe topics") {
-      val topicOne = TopicName("one")
-      val topicTwo = TopicName("two")
+      val topicOne = TopicName("describeTopicSpecOne")
+      val topicTwo = TopicName("describeTopicSpecTwo")
       for {
         _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
         _            <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
@@ -51,7 +51,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
       } yield assertTrue(
         responseBody ==
           json"""{
-                 "two" : {
+                 ${topicTwo.value} : {
                    "partition" : {
                      "0" : {
                        "leader" : 1,
@@ -68,7 +68,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
                    },
                    "replicationFactor" : 1
                  },
-                 "one" : {
+                 ${topicOne.value} : {
                    "partition" : {
                      "0" : {
                        "leader" : 1,
@@ -104,8 +104,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
 
   private val beginningOffsetSpec = suite("/offsets/begin")(
     test("should return topic first offset") {
-      val topicOne = TopicName("one")
-      val topicTwo = TopicName("two")
+      val topicOne = TopicName("beginningOffsetOne")
+      val topicTwo = TopicName("beginningOffsetTwo")
       for {
         _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
         _            <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
@@ -116,7 +116,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
                             url = URL(!! / "offsets" / "begin"),
                             method = Method.GET,
                             data = HttpData.fromString(
-                              json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
+                              json"""[{"topicName": ${topicOne.value}, "partition": 0}, {"topicName": ${topicTwo.value}, "partition": 0}, {"topicName": ${topicTwo.value}, "partition": 1}]""".noSpaces,
                               Charset.forName("utf-8"),
                             ),
                           )
@@ -139,8 +139,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
                         }
       } yield assertTrue(
         responseBody ==
-          json"""[{"topicName": "one", "partition": 0, "offset": 0}, {"topicName": "two", "partition": 0, "offset": 0},
-          {"topicName": "two", "partition": 1, "offset": 0}]"""
+          json"""[{"topicName": ${topicOne.value}, "partition": 0, "offset": 0}, {"topicName": ${topicTwo.value}, "partition": 0, "offset": 0},
+          {"topicName": ${topicTwo.value}, "partition": 1, "offset": 0}]"""
       )
     }
   )
@@ -148,7 +148,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
   private val replicationFactorSpec =
     suite("/topics/{topic}/replicationFactor")(
       test("should return replication factor for a topic") {
-        val topicName = TopicName("one")
+        val topicName = TopicName("replicationFactorSpecTopic")
         for {
           _            <- KafkaUtils.createTopic(
                             topicName,
@@ -166,7 +166,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         } yield assertTrue(responseBody == json"1")
       },
       test("should return 404 for replication factor on unknown topic") {
-        val topicName = TopicName("one")
+        val topicName = TopicName("jenexistepas")
         for {
           app      <- ZIO.service[RestEndpoints].map(_.app)
           response <- app(
@@ -183,7 +183,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
 
   private val spreadSpec = suite("/topics/{topic}/spread")(
     test("should return spread size") {
-      val topicName = TopicName("one")
+      val topicName = TopicName("spreadSpecOne")
       for {
         _            <- KafkaUtils.createTopic(
                           topicName,
@@ -218,7 +218,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
 
   private val partitionCountSpec = suite("/topics/{topic}/partitions")(
     test("should return partition count for fields=count query param") {
-      val topicName = TopicName("one")
+      val topicName = TopicName("partitionCountSpecTopic")
       for {
         _            <- KafkaUtils.createTopic(topicName, numPartition = 5)
         app          <- ZIO.service[RestEndpoints].map(_.app)
@@ -233,7 +233,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
       } yield assertTrue(responseBody == json"5")
     },
     test("should return 404 for replication factor on unknown topic") {
-      val topicName = TopicName("one")
+      val topicName = TopicName("jenexistepas")
       for {
         app      <- ZIO.service[RestEndpoints].map(_.app)
         response <- app(
@@ -267,7 +267,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
 
   private val recordCountSpec = suite("/topics/{topic}/records")(
     test("should return topic record count for fields=count query param") {
-      val topicName = TopicName("one")
+      val topicName = TopicName("recordCountSpecTopicOne")
       for {
         _            <- KafkaUtils.createTopic(topicName, numPartition = 1)
         _            <- KafkaUtils.produce(topicName, "k", "v")
@@ -284,7 +284,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
       } yield assertTrue(responseBody == json"2")
     },
     test("should fail when retrieving records") {
-      val topicName = TopicName("one")
+      val topicName = TopicName("recordCountSpecTopicTwo")
       for {
         _        <- KafkaUtils.createTopic(topicName, numPartition = 1)
         _        <- KafkaUtils.produce(topicName, "k", "v")
@@ -299,7 +299,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
       } yield assertTrue(response.status == BadRequest)
     },
     test("should fail when retrieving anything but count field") {
-      val topicName = TopicName("one")
+      val topicName = TopicName("recordCountSpecTopicThree")
       for {
         _        <- KafkaUtils.createTopic(topicName, numPartition = 1)
         _        <- KafkaUtils.produce(topicName, "k", "v")
@@ -318,8 +318,8 @@ object RestEndpointSpec extends ZIOSpecDefault {
 
   private val endOffsetSpec = suite("/offsets/end")(
     test("should return topic first offset") {
-      val topicOne = TopicName("one")
-      val topicTwo = TopicName("two")
+      val topicOne = TopicName("endOffsetSpecOne")
+      val topicTwo = TopicName("endOffsetSpecTwo")
       for {
         _            <- KafkaUtils.createTopic(topicOne, numPartition = 1)
         _            <- KafkaUtils.createTopic(topicTwo, numPartition = 2)
@@ -330,7 +330,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
                             url = URL(!! / "offsets" / "end"),
                             method = Method.GET,
                             data = HttpData.fromString(
-                              json"""[{"topicName": "one", "partition": 0}, {"topicName": "two", "partition": 0}, {"topicName": "two", "partition": 1}]""".noSpaces,
+                              json"""[{"topicName": ${topicOne.value}, "partition": 0}, {"topicName": ${topicTwo.value}, "partition": 0}, {"topicName": ${topicTwo.value}, "partition": 1}]""".noSpaces,
                               Charset.forName("utf-8"),
                             ),
                           )
@@ -353,30 +353,41 @@ object RestEndpointSpec extends ZIOSpecDefault {
                         }
       } yield assertTrue(
         responseBody ==
-          json"""[{"topicName": "one", "partition": 0, "offset": 1}, {"topicName": "two", "partition": 0, "offset": 0},
-          {"topicName": "two", "partition": 1, "offset": 0}]"""
+          json"""[{"topicName": ${topicOne.value}, "partition": 0, "offset": 1}, {"topicName": ${topicTwo.value}, "partition": 0, "offset": 0},
+          {"topicName": ${topicTwo.value}, "partition": 1, "offset": 0}]"""
       )
     }
   )
 
   override def spec: Spec[TestEnvironment with Scope, Any] =
     suite("RestEndpoint")(
-      allNameSpec,
-      describeTopicSpec,
-      topicSizeSpec,
-      beginningOffsetSpec,
-      endOffsetSpec,
-      recordCountSpec,
-      replicationFactorSpec,
-      partitionCountSpec,
-      spreadSpec,
-    )
-      .provide(
+      suite("not shared kafka")(
+        allNameSpec,
+        topicSizeSpec,
+      ).provide(
         RestEndpointsLive.layer,
         KafkaTestContainer.kafkaLayer,
         KafkaServiceLive.layer,
         AdminClient.live,
         KafkaUtils.adminClientSettingsLayer,
         KafkaUtils.producerLayer,
-      )
+      ),
+      suite("shared kafka")(
+        spreadSpec,
+        partitionCountSpec,
+        replicationFactorSpec,
+        recordCountSpec,
+        beginningOffsetSpec,
+        endOffsetSpec,
+        describeTopicSpec,
+      ).provideShared(
+        RestEndpointsLive.layer,
+        KafkaTestContainer.kafkaLayer,
+        KafkaServiceLive.layer,
+        AdminClient.live,
+        KafkaUtils.adminClientSettingsLayer,
+        KafkaUtils.producerLayer,
+      ),
+    )
+
 }
