@@ -10,12 +10,14 @@ import io.conduktor.KafkaService.{
   Spread,
   TopicDescription,
   TopicName,
+  TopicPartition,
   TopicSize,
 }
 import io.conduktor.TopicInfoStreamService.Info
 import zio.{Queue, ZIO, ZLayer}
 import zio.stream.{Stream, UStream, ZSink, ZStream}
 
+import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 
 trait TopicInfoStreamService {
@@ -83,23 +85,23 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
 
   def streamInfos = ZStream
     .fromZIO(for {
-      queue <- Queue.unbounded[Order]
-      _     <- queue.offer(Order.Init)
+      queue <- Queue.unbounded[Message]
+      _     <- queue.offer(Message.Init)
       stream =
         ZStream
           .fromQueue(queue)
           .collectWhileZIO {
-            case e: KafkaOrder          =>
+            case e: KafkaMessage        =>
               ZIO.succeed(e)
-            case Order.StopWithError(t) =>
+            case Message.StopWithError(t) =>
               ZIO.fail(t)
             //Order.Stop not handle so we stop the stream when it occur
           }
-          .mapAccumZIO(State.empty) { (state, order: KafkaOrder) =>
-            val orderResult = order.run(oldState = state)
-            orderResult.nextOrders
+          .mapAccumZIO(State.empty) { (state, message: KafkaMessage) =>
+            val orderResult = message.run(oldState = state)
+            orderResult.nextMessages
               .catchAll { e =>
-                ZStream.succeed(Order.StopWithError(e))
+                ZStream.succeed(Message.StopWithError(e))
               }
               .run(ZSink.fromQueue(queue))
               .fork
@@ -123,49 +125,49 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
     def empty: State = State(topics = TreeMap.empty, brokerCount = None)
   }
 
-  private case class OrderResult(newState: State, output: UStream[Info], nextOrders: Stream[Throwable, Order])
+  private case class MessageResult(newState: State, output: UStream[Info], nextMessages: Stream[Throwable, Message])
 
-  private sealed trait Order
-  private sealed trait KafkaOrder extends Order {
-    def run(oldState: State): OrderResult
+  private sealed trait Message
+  private sealed trait KafkaMessage extends Message {
+    def run(oldState: State): MessageResult
   }
-  private object Order {
-    final case class BrokersResponse(brokerIds: List[BrokerId]) extends KafkaOrder {
-      override def run(oldState: State): OrderResult = {
+  private object Message {
+    final case class BrokersResponse(brokerIds: List[BrokerId]) extends KafkaMessage {
+      override def run(oldState: State): MessageResult = {
         val brokerCount = BrokerCount(brokerIds.length)
         val newState    = oldState.copy(brokerCount = Some(brokerCount))
 
-        OrderResult(
+        MessageResult(
           newState = newState,
           output = ZStream.fromIterable(newState.topics).mapConcat { case (topicName, topicData) =>
             topicData.describeTopic.toList.map { describe =>
               Info.SpreadInfo(topicName, kafkaService.topicSpread(brokerCount, describe))
             }
           },
-          nextOrders = ZStream.fromZIO(kafkaService.getTopicSize(brokerIds).map(TopicSizeResponse)),
+          nextMessages = ZStream.fromZIO(kafkaService.getTopicSize(brokerIds).map(TopicSizeResponse)),
         )
       }
     }
 
-    final case class TopicSizeResponse(topicsSize: Map[TopicName, TopicSize]) extends KafkaOrder {
-      override def run(oldState: State): OrderResult = {
+    final case class TopicSizeResponse(topicsSize: Map[TopicName, TopicSize]) extends KafkaMessage {
+      override def run(oldState: State): MessageResult = {
         val topics = oldState.topics.map { case (topicName, topicData) =>
           topicName -> topicData.copy(size = topicsSize.get(topicName))
         }
-        OrderResult(
+        MessageResult(
           newState = oldState.copy(topics = topics),
           output = ZStream.fromIterable(topics).mapConcat { case (topicName, topicData) =>
             topicData.size.map { size =>
               Info.Size(topicName = topicName, size = size)
             }
           },
-          nextOrders = ZStream.empty,
+          nextMessages = ZStream.empty,
         )
       }
     }
 
-    final case class TopicNamesResponse(topicNames: Seq[TopicName]) extends KafkaOrder {
-      override def run(oldState: State): OrderResult = {
+    final case class TopicNamesResponse(topicNames: Seq[TopicName]) extends KafkaMessage {
+      override def run(oldState: State): MessageResult = {
         val topics = TreeMap.from(topicNames.map { topicName =>
           topicName -> TopicData(describeTopic = None, beginOffset = None, endOffset = None, size = None)
         })
@@ -174,24 +176,55 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
           .fromIterable(topics.keySet)
           .grouped(topicGroupSize)
           .mapZIO(kafkaService.describeTopics(_))
-          .map(Order.TopicResponse)
+          .map(Message.TopicDescriptionResponse)
 
-        val stopOrder = ZStream.succeed(if (topics.isEmpty) Order.Stop else Order.Stop) //start begin/end offset
+        val stopOrder = ZStream.succeed(if (topics.isEmpty) Message.Stop else Message.Stop) //start begin/end offset
 
-        OrderResult(
+        MessageResult(
           newState = oldState.copy(topics = topics), //TODO: maybe do a smart merge if we go to pagination
           output = ZStream.succeed(Info.Topics(topicNames)),
-          nextOrders = ordersForFetchingTopics ++ stopOrder,
+          nextMessages = ordersForFetchingTopics ++ stopOrder,
         )
       }
     }
 
-    final case class TopicResponse(topics: Map[TopicName, TopicDescription]) extends KafkaOrder {
-      override def run(oldState: State): OrderResult = {
+    final case class TopicPartitionsBeginOffsetResponse(offsets: Map[TopicPartition, Offset]) extends KafkaMessage {
+      override def run(oldState: State): MessageResult = {
+        val newTopics = offsets.foldLeft(oldState.topics){case (topics, (partition, offset)) =>
+          topics.get(partition.topicName)
+        }
+      }
+    }
+
+    final case class TopicPartitionsEndOffsetResponse(offsets: Map[TopicPartition, Offset]) extends KafkaMessage {
+      override def run(oldState: State): MessageResult = ???
+    }
+
+    final case class TopicDescriptionResponse(topics: Map[TopicName, TopicDescription]) extends KafkaMessage {
+
+      def nextMessages = {
+        val topicPartitions = ZStream
+          .fromIterable(topics)
+          .mapConcat { case (name, description) =>
+            description.partition.keys
+              .map(partition => Partition(partition.value))
+              .map(partition => TopicPartition(name, partition))
+          }
+        topicPartitions
+          .grouped(30)
+          .flatMap(topicPartitions =>
+            ZStream(
+              kafkaService.beginningOffsets(topicPartitions).map(TopicPartitionsBeginOffsetResponse.apply),
+              kafkaService.endOffsets(topicPartitions).map(TopicPartitionsEndOffsetResponse.apply))
+              .flattenZIO
+          )
+      }
+
+      override def run(oldState: State): MessageResult = {
         val newTopics = topics.foldLeft(oldState.topics) { case (topics, (topicName, topic)) =>
           topics.updatedWith(topicName)(_.map(_.copy(describeTopic = Some(topic))))
         }
-        OrderResult(
+        MessageResult(
           newState = oldState.copy(topics = newTopics),
           output = ZStream.fromIterable(newTopics.view.filterKeys(topics.contains)).mapConcat { case (topicName, stateEntry: TopicData) =>
             val topicDescription = stateEntry.describeTopic.get //TODO: be cleaner
@@ -204,29 +237,29 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
               }
               .getOrElse(List.empty)
           },
-          nextOrders = ZStream.empty, //TODO: end / start offset
+          nextMessages = nextMessages,
         )
       }
     }
 
-    object Init extends KafkaOrder {
-      override def run(oldState: State): OrderResult = OrderResult(
+    object Init extends KafkaMessage {
+      override def run(oldState: State): MessageResult = MessageResult(
         newState = oldState,
         output = ZStream.empty,
-        nextOrders = ZStream.fromIterableZIO(
+        nextMessages = ZStream.fromIterableZIO(
           ZIO.foreach(
             List(
-              kafkaService.listTopicNames.map(Order.TopicNamesResponse(_)),
-              kafkaService.getBrokerIds.map(Order.BrokersResponse(_)),
+              kafkaService.listTopicNames.map(Message.TopicNamesResponse(_)),
+              kafkaService.getBrokerIds.map(Message.BrokersResponse(_)),
             )
           )(identity)
         ),
       )
     }
 
-    final case class StopWithError(error: Throwable) extends Order
+    final case class StopWithError(error: Throwable) extends Message
 
-    object Stop extends Order
+    object Stop extends Message
   }
 }
 

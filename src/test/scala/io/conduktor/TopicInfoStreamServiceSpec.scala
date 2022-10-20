@@ -25,7 +25,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
       Record(key, value)
     }
 
-  private val returnTopicsNamesSpec =
+  val returnTopicsNamesSpec =
     test("should first return some topic names") {
       val topicOne   = TopicName("topicOne")
       val topicTwo   = TopicName("topicTwo")
@@ -54,7 +54,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
       )
     }
 
-  private val sizeExampleSpec = test("should return size of topics - example") {
+  val sizeExampleSpec = test("should return size of topics - example") {
     val topicOne   = TopicName("topicOne")
     val topicTwo   = TopicName("topicTwo")
     val topicThree = TopicName("topicThree")
@@ -90,7 +90,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     )
   }
 
-  private val sizePropertyTestingSpec = test("should return size of topics") {
+  val sizePropertyTestingSpec = test("should return size of topics") {
     check(Gen.mapOf(anyTopic, Gen.setOf(anyRecord))) { topicsWithRecords =>
       for {
         expected <- ZIO
@@ -121,7 +121,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     }
   }
 
-  private val numRecordPropertyTestingSpec = test("should return record counts of topic") {
+  val numRecordPropertyTestingSpec = test("should return record counts of topic") {
     check(Gen.mapOf(anyTopic, Gen.setOf(anyRecord))) { topicsWithRecords =>
       for {
         expected <- ZIO
@@ -153,7 +153,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     }
   }
 
-  private val partitionCountPropertyTestingSpec = test("should return partition count") {
+  val partitionCountPropertyTestingSpec = test("should return partition count") {
     check(Gen.setOf(anyTopic)) { topics =>
       for {
         expected <- ZIO
@@ -174,7 +174,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     }
   }
 
-  private val replicationFactorPropertyTestingSpec = test("should return replication factor count") {
+  val replicationFactorPropertyTestingSpec = test("should return replication factor count") {
     check(Gen.setOf(anyTopic)) { topics =>
       for {
         expected <- ZIO
@@ -197,7 +197,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     }
   }
 
-  private val spreadPropertyTestingSpec = test("should return spread") {
+  val spreadPropertyTestingSpec = test("should return spread") {
     check(Gen.setOf(anyTopic)) { topics =>
       for {
         expected <- ZIO
