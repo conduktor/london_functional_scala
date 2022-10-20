@@ -147,11 +147,13 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
                       .serviceWithStream[TopicInfoStreamService](
                         _.streamInfos
                       )
+                      .timeout(20.second)
                       .runCollect
+                      .withClock(Clock.ClockLive)
                       .map(_.toList)
       } yield assert(actual)(hasSubset(expected))
     }
-  }
+  } @@ samples(1) @@ shrinks(0)
 
   val partitionCountPropertyTestingSpec = test("should return partition count") {
     check(Gen.setOf(anyTopic)) { topics =>
