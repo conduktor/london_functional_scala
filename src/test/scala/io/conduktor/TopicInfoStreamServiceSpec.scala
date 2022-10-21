@@ -31,13 +31,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     }
 
   val shouldHandleNoTopicSpec = test("should terminate even when no topics") {
-    assertZIO(
-      ZStream
-        .serviceWithStream[TopicInfoStreamService](
-          _.streamInfos
-        )
-        .runCollect
-    )(isEmpty)
+    assertZIO(runTopicInfoStream)(isEmpty)
   }
 
   val returnTopicsNamesSpec =
@@ -221,11 +215,11 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
   override def spec = suite("TopicInfoStreamServiceSpec")(
     suite("streamsInfo")(
       suite("not shared kafka")(
-        shouldHandleNoTopicSpec
-        //  returnTopicsNamesSpec,
-        //  sizeExampleSpec,
-        //  sizePropertyTestingSpec,
-        //  partitionCountPropertyTestingSpec,
+        shouldHandleNoTopicSpec,
+        returnTopicsNamesSpec,
+        sizeExampleSpec,
+        sizePropertyTestingSpec,
+        partitionCountPropertyTestingSpec,
       ).provide(
         KafkaTestContainer.kafkaLayer,
         KafkaServiceLive.layer,
@@ -236,9 +230,9 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
         MakeTopicNameUniqueLive.layer,
       ) @@ sequential,
       suite("shared kafka")(
-        //numRecordPropertyTestingSpec,
-        //replicationFactorPropertyTestingSpec,
-        //spreadPropertyTestingSpec,
+        numRecordPropertyTestingSpec,
+        replicationFactorPropertyTestingSpec,
+        spreadPropertyTestingSpec,
       ).provideShared(
         KafkaTestContainer.kafkaLayer,
         KafkaServiceLive.layer,

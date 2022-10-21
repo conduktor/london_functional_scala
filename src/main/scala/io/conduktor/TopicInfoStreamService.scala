@@ -1,18 +1,7 @@
 package io.conduktor
 
-import io.conduktor.KafkaService.{
-  BrokerCount,
-  BrokerId,
-  Offset,
-  Partition,
-  RecordCount,
-  ReplicationFactor,
-  Spread,
-  TopicDescription,
-  TopicName,
-  TopicPartition,
-  TopicSize,
-}
+import cats.data.{NonEmptyList, NonEmptySet}
+import io.conduktor.KafkaService.{BrokerCount, BrokerId, Offset, Partition, RecordCount, ReplicationFactor, Spread, TopicDescription, TopicName, TopicPartition, TopicSize}
 import io.conduktor.TopicInfoStreamService.Info
 import zio.{Queue, ZIO, ZLayer}
 import zio.stream.{Stream, UStream, ZSink, ZStream}
@@ -55,6 +44,7 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
       stream =
         ZStream
           .fromQueue(queue)
+          .debug("queue :")
           .collectWhileZIO {
             case e: Command.Step          =>
               ZIO.succeed(e)
@@ -101,18 +91,15 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
             .filter(!oldTopicData.spread(oldState.brokerCount).contains(_))
             .map(spread => Info.SpreadInfo(topicName, spread))
 
-        val complete = Option.when(newState.isComplete)(Info.Complete)
-
         List(
           size,
           recordCountInfo,
           partitionInfo,
           replicationFactorInfo,
           spreadInfo,
-          complete,
         ).flatten
-      }
-    }
+      } ++ Option.when(newState.isComplete)(Info.Complete)
+    }.debug("info :")
 
   val topicGroupSize = 30
   private final case class TopicData(
@@ -146,6 +133,7 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
     val isComplete: Boolean                                     = maybeTopics.fold(ifEmpty = false)(_.forall { case (_, data) => data.isFull }) && brokerCount.isDefined
     val topics: TreeMap[TopicName, TopicData]                       = maybeTopics.getOrElse(TreeMap.empty)
     def setTopics(topics: TreeMap[TopicName, TopicData]): State = copy(maybeTopics = Some(topics))
+    def noTopics: State = copy(maybeTopics = None)
   }
 
   private object State {
@@ -187,22 +175,26 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
       }
     }
 
-    final case class TopicNamesResponse(topicNames: Seq[TopicName]) extends Step {
+    final case class TopicNamesResponse(topicNames: Set[TopicName]) extends Step {
       override def run(oldState: State): StepResult = {
-        val topics = TreeMap.from(topicNames.map { topicName =>
-          topicName -> TopicData(describeTopic = None, beginOffset = None, endOffset = None, size = None)
-        })
+        NonEmptyList.fromList(topicNames.toList)
+          .fold[StepResult](ifEmpty = new StepResult(oldState.noTopics, ZStream.empty)) {
+            names =>
+              val topics = TreeMap.from(names.toList.map { topicName =>
+                topicName -> TopicData(describeTopic = None, beginOffset = None, endOffset = None, size = None)
+              })
 
-        val ordersForFetchingTopics = ZStream
-          .fromIterable(topics.keySet)
-          .grouped(topicGroupSize)
-          .mapZIO(kafkaService.describeTopics(_))
-          .map(Command.TopicDescriptionResponse)
+              val ordersForFetchingTopics = ZStream
+                .fromIterable(topics.keySet)
+                .grouped(topicGroupSize)
+                .mapZIO(kafkaService.describeTopics(_))
+                .map(Command.TopicDescriptionResponse)
 
-        new StepResult(
-          newState = oldState.setTopics(topics = topics), //TODO: maybe do a smart merge if we go to pagination
-          nextCommand = ordersForFetchingTopics,
-        )
+              new StepResult(
+                newState = oldState.setTopics(topics = topics), //TODO: maybe do a smart merge if we go to pagination
+                nextCommand = ordersForFetchingTopics,
+              )
+          }
       }
     }
 
@@ -272,7 +264,7 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
         newState = oldState,
         nextCommand = ZStream(
           kafkaService.getBrokerIds.map(Command.BrokersResponse(_)),
-          kafkaService.listTopicNames.map(Command.TopicNamesResponse(_)),
+          kafkaService.listTopicNames.map(names => Command.TopicNamesResponse(names.toSet)),
         ).flattenZIO,
       )
     }
