@@ -1,12 +1,22 @@
 package io.conduktor
 
-import cats.data.{NonEmptyList, NonEmptySet}
-import io.conduktor.KafkaService.{BrokerCount, BrokerId, Offset, Partition, RecordCount, ReplicationFactor, Spread, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService.{
+  BrokerCount,
+  BrokerId,
+  Offset,
+  Partition,
+  RecordCount,
+  ReplicationFactor,
+  Spread,
+  TopicDescription,
+  TopicName,
+  TopicPartition,
+  TopicSize,
+}
 import io.conduktor.TopicInfoStreamService.Info
-import zio.{Queue, ZIO, ZLayer}
-import zio.stream.{Stream, UStream, ZSink, ZStream}
+import zio.stream.{ZSink, ZStream}
+import zio.{Queue, Task, ZIO, ZLayer}
 
-import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 
 trait TopicInfoStreamService {
@@ -15,6 +25,19 @@ trait TopicInfoStreamService {
 }
 
 object TopicInfoStreamService {
+
+  implicit class MapOps[A: Ordering, B](self: TreeMap[A, B]) {
+    def join[T, C](other: Map[A, T])(f: (B, T) => C): TreeMap[A, C] =
+      TreeMap.from(
+        self.flatMap { case (key, value) =>
+          other
+            .get(key)
+            .map(value -> _)
+            .map(f.tupled)
+            .map(key -> _)
+        }
+      )
+  }
 
   sealed trait Info
   object Info {
@@ -44,7 +67,7 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
       stream =
         ZStream
           .fromQueue(queue)
-          .debug("queue :")
+          .debug("commands")
           .collectWhileZIO {
             case e: Command.Step          =>
               ZIO.succeed(e)
@@ -53,69 +76,163 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
             //Order.Stop not handle so we stop the stream when it occur
           }
           .mapAccumZIO(State.empty) { (state, message: Command.Step) =>
-            val orderResult = message.run(oldState = state)
-            orderResult.nextCommand
+            val nextCommands = computeNextCommand(state, message)
+            val updatedState = computeNextState(state, message)
+            ZStream
+              .fromIterable(nextCommands)
+              .flattenZIO
               .catchAll(e => ZStream.succeed(Command.StopWithError(e)))
               .run(ZSink.fromQueue(queue))
               .fork
-              .as(orderResult.newState -> computeOutput(state, orderResult.newState))
+              .as(updatedState -> computeInfos(state, updatedState))
           }
-          .flatten
+          .flatMap(infos => ZStream.fromIterable(infos))
+          .debug("info")
     } yield stream)
     .flatten
 
-  private def computeOutput(oldState: State, newState: State): UStream[Info] =
-    ZStream.fromIterable {
-      val newNames  = newState.topics.keySet -- oldState.topics.keySet
-      val newTopics = if (newNames.nonEmpty) List(Info.Topics(newNames.toList)) else List.empty
-      newTopics ++ newState.topics.flatMap { case (topicName, newTopicData) =>
-        val oldTopicData = oldState.topics.getOrElse(topicName, TopicData.empty)
-        val size         = newTopicData.size.filter(!oldTopicData.size.contains(_)).map(size => Info.Size(topicName, size))
+  private def computeNextState(state: State, message: Command.Step): State =
+    message match {
+      case m: Command.BrokersResponse =>
+        val brokerCount = BrokerCount(m.brokerIds.length)
+        state.copy(brokerCount = Some(brokerCount))
 
-        val recordCountInfo =
-          newTopicData.recordCount
-            .filter(!oldTopicData.recordCount.contains(_))
-            .map(recordCount => Info.RecordCountInfo(topicName, recordCount))
+      case m: Command.TopicSizeResponse =>
+        state.updateTopics { case (topicName, topicData) => topicData.copy(size = m.topicsSize.get(topicName)) }
 
-        val partitionInfo =
-          newTopicData.partition.filter(!oldTopicData.partition.contains(_)).map(partition => Info.PartitionInfo(topicName, partition))
+      case m: Command.TopicNamesResponse =>
+        state.setTopics(TreeMap.from(m.topicNames.map(name => name -> TopicData.empty)))
 
-        val replicationFactorInfo =
-          newTopicData.replicationFactor
-            .filter(!oldTopicData.replicationFactor.contains(_))
-            .map(replicationFactor => Info.ReplicationFactorInfo(topicName, replicationFactor))
+      case m: Command.TopicPartitionsBeginOffsetResponse =>
+        val offsetsByTopic = m.offsets
+          .groupMap { case (topicPartition, _) => topicPartition.topicName } { case (topicPartition, offset) =>
+            (topicPartition.partition, offset)
+          }
+        val newTopics      = state.topics.join(offsetsByTopic) { case (data, offsets) => data.updateBeginOffsets(offsets.toMap) }
+        state.setTopics(newTopics)
 
-        val spreadInfo =
-          newTopicData
-            .spread(newState.brokerCount)
-            .filter(!oldTopicData.spread(oldState.brokerCount).contains(_))
-            .map(spread => Info.SpreadInfo(topicName, spread))
+      case m: Command.TopicPartitionsEndOffsetResponse =>
+        val offsetsByTopic = m.offsets
+          .groupMap { case (topicPartition, _) => topicPartition.topicName } { case (topicPartition, offset) =>
+            (topicPartition.partition, offset)
+          }
+        val newTopics      = state.topics.join(offsetsByTopic) { case (data, offsets) => data.updateEndOffsets(offsets.toMap) }
+        state.setTopics(newTopics)
 
-        List(
-          size,
-          recordCountInfo,
-          partitionInfo,
-          replicationFactorInfo,
-          spreadInfo,
-        ).flatten
-      } ++ Option.when(newState.isComplete)(Info.Complete)
-    }.debug("info :")
+      case m: Command.TopicDescriptionResponse =>
+        val updatedTopics = state.topics.join(m.topics) { case (data, description) =>
+          data.copy(describeTopic = Some(description))
+        }
+        state.setTopics(updatedTopics)
 
-  val topicGroupSize = 30
+      case Command.Init => state
+    }
+
+  //TODO: it let state in the argument list on purpose because we should take into account the
+  //current state to know what the next command is because response ordering is non determinist
+  private val topicGroupSize                                                               = 30
+  private def computeNextCommand(state: State, message: Command.Step): List[Task[Command]] =
+    message match {
+      case Command.Init =>
+        kafkaService.getBrokerIds.map(Command.BrokersResponse(_)) ::
+          kafkaService.listTopicNames.map(names => Command.TopicNamesResponse(names.toSet)) :: Nil
+
+      case m: Command.BrokersResponse =>
+        kafkaService.getTopicSize(m.brokerIds).map(Command.TopicSizeResponse) :: Nil
+
+      case m: Command.TopicNamesResponse =>
+        m.topicNames
+          .grouped(topicGroupSize)
+          .map(topics => kafkaService.describeTopics(topics.toList).map(Command.TopicDescriptionResponse))
+          .toList
+
+      case m: Command.TopicDescriptionResponse =>
+        val topicPartitions =
+          m.topics.toList
+            .flatMap { case (name, description) =>
+              description.partition.keys
+                .map(partition => Partition(partition.value))
+                .map(partition => TopicPartition(name, partition))
+            }
+        topicPartitions
+          .grouped(30)
+          .toList
+          .flatMap(topicPartitions =>
+            List(
+              kafkaService.beginningOffsets(topicPartitions).map(Command.TopicPartitionsBeginOffsetResponse),
+              kafkaService.endOffsets(topicPartitions).map(Command.TopicPartitionsEndOffsetResponse.apply),
+            )
+          )
+
+      case _: Command.TopicSizeResponse                  => Nil
+      case _: Command.TopicPartitionsBeginOffsetResponse => Nil
+      case _: Command.TopicPartitionsEndOffsetResponse   => Nil
+    }
+
+  private def computeInfos(oldState: State, newState: State): Iterable[Info] = {
+    val newNames  = newState.topics.keySet -- oldState.topics.keySet
+    val newTopics = if (newNames.nonEmpty) List(Info.Topics(newNames.toList)) else List.empty
+
+    newTopics ++ newState.topics.flatMap { case (topicName, newTopicData) =>
+      val oldTopicData = oldState.topics.getOrElse(topicName, TopicData.empty)
+      val size         = newTopicData.size.filter(!oldTopicData.size.contains(_)).map(size => Info.Size(topicName, size))
+
+      val recordCountInfo =
+        newTopicData.recordCount
+          .filter(!oldTopicData.recordCount.contains(_))
+          .map(recordCount => Info.RecordCountInfo(topicName, recordCount))
+
+      val partitionInfo =
+        newTopicData.partition.filter(!oldTopicData.partition.contains(_)).map(partition => Info.PartitionInfo(topicName, partition))
+
+      val replicationFactorInfo =
+        newTopicData.replicationFactor
+          .filter(!oldTopicData.replicationFactor.contains(_))
+          .map(replicationFactor => Info.ReplicationFactorInfo(topicName, replicationFactor))
+
+      val spreadInfo =
+        newTopicData
+          .spread(newState.brokerCount)
+          .filter(!oldTopicData.spread(oldState.brokerCount).contains(_))
+          .map(spread => Info.SpreadInfo(topicName, spread))
+
+      size ++
+        recordCountInfo ++
+        partitionInfo ++
+        replicationFactorInfo ++
+        spreadInfo
+    } ++ Option.when(newState.isComplete)(Info.Complete)
+  }
+
   private final case class TopicData(
     describeTopic: Option[TopicDescription],
     beginOffset: Option[Map[Partition, Offset]],
     endOffset: Option[Map[Partition, Offset]],
     size: Option[TopicSize],
   ) {
-    val recordCount: Option[RecordCount]                         =
+    def updateBeginOffsets(offsets: Map[Partition, Offset]): TopicData = {
+      val updatedOffsets = offsets.foldLeft(beginOffset.getOrElse(Map.empty)) { case (acc, (partition, offset)) =>
+        acc.updated(partition, offset)
+      }
+      copy(beginOffset = Some(updatedOffsets))
+    }
+
+    def updateEndOffsets(offsets: Map[Partition, Offset]): TopicData = {
+      val updatedOffsets = offsets.foldLeft(endOffset.getOrElse(Map.empty)) { case (acc, (partition, offset)) =>
+        acc.updated(partition, offset)
+      }
+      copy(endOffset = Some(updatedOffsets))
+    }
+
+    val recordCount: Option[RecordCount]             =
       endOffset.zip(beginOffset).map { case (end, begin) =>
         val sumEndOfsets    = end.values.map(_.value).sum
         val sumStartOffsets = begin.values.map(_.value).sum
         RecordCount(sumEndOfsets - sumStartOffsets)
       }
-    val partition: Option[Partition]                             = describeTopic.map(_.partition.size).map(Partition)
-    val replicationFactor: Option[ReplicationFactor]             = describeTopic.map(_.replicationFactor)
+    val partition: Option[Partition]                 = describeTopic.map(_.partition.size).map(Partition)
+    val replicationFactor: Option[ReplicationFactor] = describeTopic.map(_.replicationFactor)
+
     def spread(brokerCount: Option[BrokerCount]): Option[Spread] =
       describeTopic.zip(brokerCount).map { case (describe, brokerCount) => kafkaService.topicSpread(brokerCount, describe) }
 
@@ -130,145 +247,33 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
   }
 
   private case class State(maybeTopics: Option[TreeMap[TopicName, TopicData]], brokerCount: Option[BrokerCount]) {
-    val isComplete: Boolean                                     = maybeTopics.fold(ifEmpty = false)(_.forall { case (_, data) => data.isFull }) && brokerCount.isDefined
-    val topics: TreeMap[TopicName, TopicData]                       = maybeTopics.getOrElse(TreeMap.empty)
-    def setTopics(topics: TreeMap[TopicName, TopicData]): State = copy(maybeTopics = Some(topics))
-    def noTopics: State = copy(maybeTopics = None)
+    val isComplete: Boolean                                              = maybeTopics.fold(ifEmpty = false)(_.forall { case (_, data) => data.isFull }) && brokerCount.isDefined
+    val topics: TreeMap[TopicName, TopicData]                            = maybeTopics.getOrElse(TreeMap.empty)
+    def setTopics(topics: TreeMap[TopicName, TopicData]): State          = copy(maybeTopics = Some(topics))
+    def updateTopics(update: (TopicName, TopicData) => TopicData): State = setTopics(topics.map { case (name, data) =>
+      name -> update(name, data)
+    })
+    def noTopics: State                                                  = copy(maybeTopics = None)
   }
 
   private object State {
     def empty: State = State(maybeTopics = None, brokerCount = None)
   }
 
-  private class StepResult(val newState: State, val nextCommand: Stream[Throwable, Command])
-
+  //TODO: build an ADT for commands and an interpreter to split Commands from Responses
   private sealed trait Command
   private object Command {
     final case class StopWithError(error: Throwable) extends Command
     object Stop                                      extends Command
 
-    sealed trait Step extends Command {
-      def run(oldState: State): StepResult
-    }
-
-    final case class BrokersResponse(brokerIds: List[BrokerId]) extends Step {
-      override def run(oldState: State): StepResult = {
-        val brokerCount = BrokerCount(brokerIds.length)
-        val newState    = oldState.copy(brokerCount = Some(brokerCount))
-
-        new StepResult(
-          newState = newState,
-          nextCommand = ZStream.fromZIO(kafkaService.getTopicSize(brokerIds).map(TopicSizeResponse)),
-        )
-      }
-    }
-
-    final case class TopicSizeResponse(topicsSize: Map[TopicName, TopicSize]) extends Step {
-      override def run(oldState: State): StepResult = {
-        val topics = oldState.topics.map { case (topicName, topicData) =>
-          topicName -> topicData.copy(size = topicsSize.get(topicName))
-        }
-        new StepResult(
-          newState = oldState.setTopics(topics),
-          nextCommand = ZStream.empty,
-        )
-      }
-    }
-
-    final case class TopicNamesResponse(topicNames: Set[TopicName]) extends Step {
-      override def run(oldState: State): StepResult = {
-        NonEmptyList.fromList(topicNames.toList)
-          .fold[StepResult](ifEmpty = new StepResult(oldState.noTopics, ZStream.empty)) {
-            names =>
-              val topics = TreeMap.from(names.toList.map { topicName =>
-                topicName -> TopicData(describeTopic = None, beginOffset = None, endOffset = None, size = None)
-              })
-
-              val ordersForFetchingTopics = ZStream
-                .fromIterable(topics.keySet)
-                .grouped(topicGroupSize)
-                .mapZIO(kafkaService.describeTopics(_))
-                .map(Command.TopicDescriptionResponse)
-
-              new StepResult(
-                newState = oldState.setTopics(topics = topics), //TODO: maybe do a smart merge if we go to pagination
-                nextCommand = ordersForFetchingTopics,
-              )
-          }
-      }
-    }
-
-    final case class TopicPartitionsBeginOffsetResponse(offsets: Map[TopicPartition, Offset]) extends Step {
-      override def run(oldState: State): StepResult = {
-        val newTopics = offsets.foldLeft(oldState.topics) { case (topics, (TopicPartition(topicName, partition), offset)) =>
-          topics.updatedWith(topicName)(_.map { topicData =>
-            topicData.copy(beginOffset = Some(topicData.beginOffset.getOrElse(Map.empty).updated(partition, offset)))
-          }.orElse(Some(TopicData(describeTopic = None, beginOffset = Some(Map(partition -> offset)), endOffset = None, size = None))))
-        }
-
-        new StepResult(
-          newState = oldState.setTopics(newTopics),
-          nextCommand = ZStream.empty,
-        )
-      }
-    }
-
-    final case class TopicPartitionsEndOffsetResponse(offsets: Map[TopicPartition, Offset]) extends Step {
-      override def run(oldState: State): StepResult = {
-        val newTopics = offsets.foldLeft(oldState.topics) { case (topics, (TopicPartition(topicName, partition), offset)) =>
-          topics.updatedWith(topicName)(_.map { topicData =>
-            topicData.copy(endOffset = Some(topicData.endOffset.getOrElse(Map.empty).updated(partition, offset)))
-          }.orElse(Some(TopicData(describeTopic = None, beginOffset = None, endOffset = Some(Map(partition -> offset)), size = None))))
-        }
-
-        new StepResult(
-          newState = oldState.setTopics(newTopics),
-          nextCommand = ZStream.empty,
-        )
-      }
-    }
-
-    final case class TopicDescriptionResponse(topics: Map[TopicName, TopicDescription]) extends Step {
-
-      def nextMessages = {
-        val topicPartitions = ZStream
-          .fromIterable(topics)
-          .mapConcat { case (name, description) =>
-            description.partition.keys
-              .map(partition => Partition(partition.value))
-              .map(partition => TopicPartition(name, partition))
-          }
-        topicPartitions
-          .grouped(30)
-          .flatMap(topicPartitions =>
-            ZStream(
-              kafkaService.beginningOffsets(topicPartitions).map(TopicPartitionsBeginOffsetResponse.apply),
-              kafkaService.endOffsets(topicPartitions).map(TopicPartitionsEndOffsetResponse.apply),
-            ).flattenZIO
-          )
-      }
-
-      override def run(oldState: State): StepResult = {
-        val newTopics = topics.foldLeft(oldState.topics) { case (topics, (topicName, topic)) =>
-          topics.updatedWith(topicName)(_.map(_.copy(describeTopic = Some(topic))))
-        }
-        new StepResult(
-          newState = oldState.setTopics(newTopics),
-          nextCommand = nextMessages,
-        )
-      }
-    }
-
-    object Init extends Step {
-      override def run(oldState: State): StepResult = new StepResult(
-        newState = oldState,
-        nextCommand = ZStream(
-          kafkaService.getBrokerIds.map(Command.BrokersResponse(_)),
-          kafkaService.listTopicNames.map(names => Command.TopicNamesResponse(names.toSet)),
-        ).flattenZIO,
-      )
-    }
-
+    sealed trait Step                                                                   extends Command
+    case class BrokersResponse(brokerIds: List[BrokerId])                               extends Step
+    case class TopicSizeResponse(topicsSize: Map[TopicName, TopicSize])                 extends Step
+    case class TopicNamesResponse(topicNames: Set[TopicName])                           extends Step
+    case class TopicPartitionsBeginOffsetResponse(offsets: Map[TopicPartition, Offset]) extends Step
+    case class TopicPartitionsEndOffsetResponse(offsets: Map[TopicPartition, Offset])   extends Step
+    case class TopicDescriptionResponse(topics: Map[TopicName, TopicDescription])       extends Step
+    case object Init                                                                    extends Step
   }
 }
 
