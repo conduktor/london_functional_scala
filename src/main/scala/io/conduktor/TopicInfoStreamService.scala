@@ -27,14 +27,15 @@ trait TopicInfoStreamService {
 object TopicInfoStreamService {
 
   implicit class MapOps[A: Ordering, B](self: TreeMap[A, B]) {
-    def join[T, C](other: Map[A, T])(f: (B, T) => C): TreeMap[A, C] =
+    def join[T](other: Map[A, T])(f: (B, T) => B): TreeMap[A, B] =
       TreeMap.from(
-        self.flatMap { case (key, value) =>
+        self.map { case (key, value) =>
           other
             .get(key)
             .map(value -> _)
             .map(f.tupled)
             .map(key -> _)
+            .getOrElse(key -> value)
         }
       )
   }
