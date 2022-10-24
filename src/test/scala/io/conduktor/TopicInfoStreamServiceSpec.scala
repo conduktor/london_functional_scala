@@ -15,7 +15,9 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
   val runTopicInfoStream = ZStream
     .serviceWithStream[TopicInfoStreamService](
       _.streamInfos
-    ).takeWhile(!_.isInstanceOf[Info.Complete.type]).runCollect
+    )
+    .takeWhile(!_.isInstanceOf[Info.Complete.type])
+    .runCollect
 
   case class Record(key: String, value: String)
 
