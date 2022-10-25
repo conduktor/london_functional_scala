@@ -245,5 +245,5 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
         MakeTopicNameUniqueLive.layer,
       ),
     )
-  ) @@ samples(3) @@ shrinks(0) @@ timeout(20.second)
+  ) @@ samples(3) @@ shrinks(0) @@ timeout(2.minutes)
 }
