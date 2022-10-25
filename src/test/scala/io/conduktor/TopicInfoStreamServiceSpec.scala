@@ -7,7 +7,7 @@ import zio.kafka.admin.AdminClient
 import zio.kafka.admin.AdminClient.NewTopic
 import zio.stream.ZStream
 import zio.test.Assertion._
-import zio.test.TestAspect.{samples, sequential, shrinks}
+import zio.test.TestAspect.{samples, sequential, shrinks, timeout}
 import zio.test._
 
 object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
@@ -245,5 +245,5 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
         MakeTopicNameUniqueLive.layer,
       ),
     )
-  ) @@ samples(3) @@ shrinks(0)
+  ) @@ samples(3) @@ shrinks(0) @@ timeout(2.minutes)
 }

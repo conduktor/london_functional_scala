@@ -68,7 +68,6 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
       stream =
         ZStream
           .fromQueue(queue)
-          .debug("commands")
           .collectWhileZIO {
             case e: Command.Step          =>
               ZIO.succeed(e)
@@ -88,7 +87,6 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
               .as(updatedState -> computeInfos(state, updatedState))
           }
           .flatMap(infos => ZStream.fromIterable(infos))
-          .debug("info")
     } yield stream)
     .flatten
 
@@ -99,10 +97,12 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
         state.copy(brokerCount = Some(brokerCount))
 
       case m: Command.TopicSizeResponse =>
-        state.updateTopics { case (topicName, topicData) => topicData.copy(size = m.topicsSize.get(topicName)) }
+        state.updateTopics(forTopics = m.topicsSize.keys) { case (topicName, topicData) =>
+          topicData.copy(size = m.topicsSize.get(topicName))
+        }
 
       case m: Command.TopicNamesResponse =>
-        state.setTopics(TreeMap.from(m.topicNames.map(name => name -> TopicData.empty)))
+        state.updateTopics(forTopics = m.topicNames) { case (_, before) => before }
 
       case m: Command.TopicPartitionsBeginOffsetResponse =>
         val offsetsByTopic = m.offsets
@@ -248,13 +248,15 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
   }
 
   private case class State(maybeTopics: Option[TreeMap[TopicName, TopicData]], brokerCount: Option[BrokerCount]) {
-    val isComplete: Boolean                                              = maybeTopics.fold(ifEmpty = false)(_.forall { case (_, data) => data.isFull }) && brokerCount.isDefined
-    val topics: TreeMap[TopicName, TopicData]                            = maybeTopics.getOrElse(TreeMap.empty)
-    def setTopics(topics: TreeMap[TopicName, TopicData]): State          = copy(maybeTopics = Some(topics))
-    def updateTopics(update: (TopicName, TopicData) => TopicData): State = setTopics(topics.map { case (name, data) =>
-      name -> update(name, data)
-    })
-    def noTopics: State                                                  = copy(maybeTopics = None)
+    val isComplete: Boolean                                                                              = maybeTopics.fold(ifEmpty = false)(_.forall { case (_, data) => data.isFull }) && brokerCount.isDefined
+    val topics: TreeMap[TopicName, TopicData]                                                            = maybeTopics.getOrElse(TreeMap.empty)
+    def setTopics(topics: TreeMap[TopicName, TopicData]): State                                          = copy(maybeTopics = Some(topics))
+    def updateTopics(forTopics: Iterable[TopicName])(update: (TopicName, TopicData) => TopicData): State = setTopics(
+      TreeMap.from[TopicName, TopicData]((topics.keySet ++ forTopics).toList.map { topicName =>
+        topicName -> update(topicName, topics.getOrElse(topicName, TopicData.empty))
+      })
+    )
+    def noTopics: State                                                                                  = copy(maybeTopics = None)
   }
 
   private object State {
