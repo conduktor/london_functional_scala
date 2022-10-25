@@ -16,17 +16,20 @@ import io.conduktor.KafkaService.{
   TopicPartition,
   TopicSize,
 }
-import sttp.tapir.{Schema, Validator}
-import sttp.tapir.generic.auto.schemaForCaseClass
-import sttp.tapir.json.circe.jsonBody
-import sttp.tapir.server.ziohttp.ZioHttpInterpreter
+import org.http4s._
+import org.http4s.server.Router
+import sttp.tapir.generic.auto._
+import sttp.tapir.json.circe._
+import sttp.tapir.server.http4s.Http4sServerOptions
+import sttp.tapir.server.http4s.ztapir.ZHttp4sServerInterpreter
+import sttp.tapir.server.interceptor.cors.CORSInterceptor
 import sttp.tapir.ztapir._
-import zhttp.http.middleware.Cors.CorsConfig
-import zhttp.http.{HttpApp, Method, Middleware}
+import zio.interop.catz._
+import sttp.tapir.{Schema, Validator}
 import zio.{Cause, IO, Task, ZIO, ZLayer}
 
 trait RestEndpoints {
-  def app: HttpApp[Any, Throwable]
+  def app: HttpApp[Task]
 }
 
 class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
@@ -187,16 +190,14 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
           .handleError
       }
 
-  val app: HttpApp[Any, Throwable] = {
-    val config: CorsConfig =
-      CorsConfig(
-        anyOrigin = true,
-        anyMethod = true,
-        allowedOrigins = s => s.equals("localhost"),
-        allowedMethods = Some(Set(Method.GET, Method.POST, Method.PUT)),
-      )
+  val app: HttpApp[Task] = {
 
-    ZioHttpInterpreter().toHttp(
+    val routes: HttpRoutes[Task] = ZHttp4sServerInterpreter(
+      Http4sServerOptions
+        .customiseInterceptors[Task]
+        .corsInterceptor(CORSInterceptor.default[Task])
+        .options
+    ).from(
       List(
         allTopicsName,
         describeTopics,
@@ -208,16 +209,17 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         spread,
         partitionCount,
       )
-    ) @@ Middleware
-      .cors(config)
+    ).toRoutes
+
+    Router("/" -> routes).orNotFound
   }
 
 }
 
 object RestEndpointsLive {
-  val layer: ZLayer[KafkaService, Nothing, RestEndpoints] = ZLayer {
+  val layer: ZLayer[KafkaService, Nothing, HttpApp[Task]] = ZLayer {
     for {
       kafkaService <- ZIO.service[KafkaService]
-    } yield new RestEndpointsLive(kafkaService)
+    } yield new RestEndpointsLive(kafkaService).app
   }
 }
