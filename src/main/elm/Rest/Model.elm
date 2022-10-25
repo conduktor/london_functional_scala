@@ -1,4 +1,4 @@
-module Model exposing (..)
+module Rest.Model exposing (..)
 
 import Dict exposing (Dict)
 

@@ -1,8 +1,8 @@
-module HttpRequests exposing (listNames, loadSizes, loadRecordCount, loadPartitionCount, loadReplicationFactor, loadSpread, Msg(..))
+module Rest.HttpRequests exposing (listNames, loadSizes, loadRecordCount, loadPartitionCount, loadReplicationFactor, loadSpread, Msg(..))
 
 import Dict exposing (Dict)
 import Http
-import Model exposing (..)
+import Rest.Model exposing (..)
 
 import Json.Decode as Decode
 import Json.Encode as Encode

@@ -1,6 +1,6 @@
-module Table exposing (..)
+module Rest.Table exposing (..)
 
-import Model exposing (..)
+import Rest.Model exposing (..)
 import Html exposing (table, text, td, tr, th, Html, Attribute)
 import Html.Attributes exposing (style)
 

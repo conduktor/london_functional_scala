@@ -1,0 +1,33 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>App</title>
+    <script type="text/javascript" src="elm.js"></script>
+</head>
+
+<body>
+<div id="myapp"></div>
+</body>
+
+<script type="text/javascript">
+
+    // Start the Elm application.
+    var app = Elm.Eventsource.Main.init({
+        node: document.getElementById('myapp')
+    });
+
+    let sse = new EventSource('http://localhost:8090/streaming');
+
+    // When a message comes into our WebSocket, we pass the message along
+    // to the `messageReceiver` port.
+    sse.addEventListener("message", function(event) {
+        app.ports.messageReceiver.send(event.data);
+    });
+
+    // If you want to use a JavaScript library to manage your WebSocket
+    // connection, replace the code in JS with the alternate implementation.
+</script>
+
+</html>

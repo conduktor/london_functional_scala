@@ -1,10 +1,11 @@
-module Main exposing (..)
+module Rest.Main exposing (..)
 
 import Browser
 import Html exposing (Html, text)
-import HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadReplicationFactor, loadSizes, loadSpread)
-import Table exposing (..)
-import Model exposing (..)
+import Rest.HttpRequests as HttpRequests
+import Rest.HttpRequests exposing (Msg(..), listNames, loadPartitionCount, loadRecordCount, loadReplicationFactor, loadSizes, loadSpread)
+import Rest.Table exposing (..)
+import Rest.Model exposing (..)
 
 main =
   Browser.element

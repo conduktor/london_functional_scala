@@ -5,62 +5,6 @@ on:
     types: [ opened, reopened, synchronize ]
 
 jobs:
-  scalafmt:
-    runs-on: ubuntu-latest
-    env:
-      GH_READ_PACKAGES: ${{ secrets.GH_READ_PACKAGES }}
-    steps:
-      - run: env
-        shell: bash
-      - uses: actions/checkout@v3
-      - uses: coursier/cache-action@v6
-      - uses: graalvm/setup-graalvm@v1
-        with:
-          version: '22.2.0'
-          java-version: '17'
-          components: 'js'
-      - name: Java env
-        shell: bash
-        run: | # Copied from https://github.com/graalvm/setup-graalvm/#quickstart-template
-          echo "GRAALVM_HOME: $GRAALVM_HOME"
-          echo "JAVA_HOME: $JAVA_HOME"
-          java --version
-      - name: Use CI sbt jvmopts
-        shell: bash
-        run: |
-          mv .jvmopts-ci .jvmopts
-          cat .jvmopts
-      - name: scalafmt
-        run: sbt 'scalafmtCheckAll' # https://scalameta.org/scalafmt/docs/installation.html#task-keys
-
-  scalafix:
-    runs-on: ubuntu-latest
-    env:
-      GH_READ_PACKAGES: ${{ secrets.GH_READ_PACKAGES }}
-    steps:
-      - run: env
-        shell: bash
-      - uses: actions/checkout@v3
-      - uses: coursier/cache-action@v6
-      - uses: graalvm/setup-graalvm@v1
-        with:
-          version: '22.2.0'
-          java-version: '17'
-          components: 'js'
-      - name: Java env
-        shell: bash
-        run: | # Copied from https://github.com/graalvm/setup-graalvm/#quickstart-template
-          echo "GRAALVM_HOME: $GRAALVM_HOME"
-          echo "JAVA_HOME: $JAVA_HOME"
-          java --version
-      - name: Use CI sbt jvmopts
-        shell: bash
-        run: |
-          mv .jvmopts-ci .jvmopts
-          cat .jvmopts
-      - name: scalafix
-        run: sbt 'scalafixAll --check' # https://scalacenter.github.io/scalafix/docs/users/installation.html#enforce-in-ci
-
   tests:
     runs-on: ubuntu-latest
     env:

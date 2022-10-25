@@ -36,6 +36,7 @@ lazy val root = (project in file("."))
       "com.softwaremill.sttp.tapir"   %% "tapir-json-circe"           % "1.1.3",
       "io.circe"                      %% "circe-core"                 % circeVersion,
       "io.circe"                      %% "circe-generic"              % circeVersion,
+      "io.circe"                      %% "circe-generic-extras"       % circeVersion,
       "ch.qos.logback"                 % "logback-classic"            % "1.4.4",
       "io.circe"                      %% "circe-literal"              % circeVersion % Test,
     ),

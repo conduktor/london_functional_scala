@@ -1,27 +1,20 @@
 package io.conduktor
 
-import io.circe.Codec
-import io.circe.generic.semiauto.deriveCodec
+import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
+import sttp.model.sse.ServerSentEvent
+import io.circe.generic.extras.{Configuration, semiauto}
+import io.circe.{Codec, Encoder}
+import io.circe.generic.semiauto.{deriveCodec, deriveEncoder}
+import io.circe.syntax.EncoderOps
 import io.conduktor.CirceCodec._
-import io.conduktor.KafkaService.{
-  Offset,
-  Partition,
-  PartitionCount,
-  PartitionInfo,
-  RecordCount,
-  ReplicationFactor,
-  Spread,
-  TopicDescription,
-  TopicName,
-  TopicPartition,
-  TopicSize,
-}
+import io.conduktor.KafkaService.{Offset, Partition, PartitionCount, PartitionInfo, RecordCount, ReplicationFactor, Spread, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.TopicInfoStreamService.Info
 import org.http4s._
 import org.http4s.server.Router
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
 import sttp.tapir.server.http4s.Http4sServerOptions
-import sttp.tapir.server.http4s.ztapir.ZHttp4sServerInterpreter
+import sttp.tapir.server.http4s.ztapir.{ZHttp4sServerInterpreter, serverSentEventsBody}
 import sttp.tapir.server.interceptor.cors.CORSInterceptor
 import sttp.tapir.ztapir._
 import zio.interop.catz._
@@ -32,7 +25,7 @@ trait RestEndpoints {
   def app: HttpApp[Task]
 }
 
-class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
+class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: TopicInfoStreamService) extends RestEndpoints {
 
   case class ErrorInfo(message: String)
 
@@ -52,6 +45,18 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         }
 
   }
+
+
+  implicit val infoEncoder: Encoder[Info] = {
+    implicit val config: Configuration = Configuration.default.withDiscriminator("type")
+    deriveConfiguredEncoder
+  }
+
+  val infos = endpoint.get
+    .in("streaming")
+    .errorOut(jsonBody[ErrorInfo])
+    .out(serverSentEventsBody)
+    .zServerLogic(_ => ZIO.succeed(topicInfoStreamService.streamInfos.map(info => ServerSentEvent(data = Some(info.asJson.spaces2)))))
 
   val allTopicsName =
     endpoint.get
@@ -199,6 +204,7 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
         .options
     ).from(
       List(
+        infos,
         allTopicsName,
         describeTopics,
         sizeTopics,
@@ -217,9 +223,10 @@ class RestEndpointsLive(kafkaService: KafkaService) extends RestEndpoints {
 }
 
 object RestEndpointsLive {
-  val layer: ZLayer[KafkaService, Nothing, HttpApp[Task]] = ZLayer {
+  val layer: ZLayer[KafkaService with TopicInfoStreamService, Nothing, HttpApp[Task]] = ZLayer {
     for {
       kafkaService <- ZIO.service[KafkaService]
-    } yield new RestEndpointsLive(kafkaService).app
+      streamService <- ZIO.service[TopicInfoStreamService]
+    } yield new RestEndpointsLive(kafkaService, streamService).app
   }
 }

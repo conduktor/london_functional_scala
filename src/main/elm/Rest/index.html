@@ -1,0 +1,25 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>App</title>
+    <script type="text/javascript" src="elm.js"></script>
+</head>
+
+<body>
+<div id="myapp"></div>
+</body>
+
+<script type="text/javascript">
+
+    // Start the Elm application.
+    Elm.Rest.Main.init({
+        node: document.getElementById('myapp')
+    });
+
+    // If you want to use a JavaScript library to manage your WebSocket
+    // connection, replace the code in JS with the alternate implementation.
+</script>
+
+</html>

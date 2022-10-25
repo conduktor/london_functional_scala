@@ -27,13 +27,14 @@ object App extends ZIOAppDefault {
     (for {
       _ <- ZIO.debug("starting")
       _ <- ZIO.service[Server]
+      _ <- ZIO.never
     } yield ()).exitCode
       .provide(
         serverLayer(8090),
         RestEndpointsLive.layer,
         KafkaServiceLive.layer,
+        TopicInfoStreamServiceLive.layer,
         AdminClient.live,
         ZLayer.succeed(AdminClientSettings(List("localhost:9092"))),
       )
-
 }
