@@ -55,6 +55,9 @@ object KafkaService {
         TopicName(topicPartition.name),
         Partition(topicPartition.partition),
       )
+
+    implicit val ordering: Ordering[TopicPartition] = (x: TopicPartition, y: TopicPartition) =>
+      implicitly[Ordering[(String, Int)]].compare((x.topicName.value, x.partition.value), (y.topicName.value, y.partition.value))
   }
 
   case class RecordCount(value: Long) extends AnyVal

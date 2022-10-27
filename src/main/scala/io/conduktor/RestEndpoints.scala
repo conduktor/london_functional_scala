@@ -2,12 +2,24 @@ package io.conduktor
 
 import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
 import sttp.model.sse.ServerSentEvent
-import io.circe.generic.extras.{Configuration, semiauto}
+import io.circe.generic.extras.Configuration
 import io.circe.{Codec, Encoder}
-import io.circe.generic.semiauto.{deriveCodec, deriveEncoder}
+import io.circe.generic.semiauto.deriveCodec
 import io.circe.syntax.EncoderOps
 import io.conduktor.CirceCodec._
-import io.conduktor.KafkaService.{Offset, Partition, PartitionCount, PartitionInfo, RecordCount, ReplicationFactor, Spread, TopicDescription, TopicName, TopicPartition, TopicSize}
+import io.conduktor.KafkaService.{
+  Offset,
+  Partition,
+  PartitionCount,
+  PartitionInfo,
+  RecordCount,
+  ReplicationFactor,
+  Spread,
+  TopicDescription,
+  TopicName,
+  TopicPartition,
+  TopicSize,
+}
 import io.conduktor.TopicInfoStreamService.Info
 import org.http4s._
 import org.http4s.server.Router
@@ -45,7 +57,6 @@ class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: Topi
         }
 
   }
-
 
   implicit val infoEncoder: Encoder[Info] = {
     implicit val config: Configuration = Configuration.default.withDiscriminator("type")
@@ -225,7 +236,7 @@ class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: Topi
 object RestEndpointsLive {
   val layer: ZLayer[KafkaService with TopicInfoStreamService, Nothing, HttpApp[Task]] = ZLayer {
     for {
-      kafkaService <- ZIO.service[KafkaService]
+      kafkaService  <- ZIO.service[KafkaService]
       streamService <- ZIO.service[TopicInfoStreamService]
     } yield new RestEndpointsLive(kafkaService, streamService).app
   }

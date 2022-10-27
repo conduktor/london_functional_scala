@@ -214,15 +214,23 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
     def layer: ZLayer[Any, Nothing, MakeTopicNameUniqueLive] = ZLayer.fromZIO(Ref.make(0).map(new MakeTopicNameUniqueLive(_)))
   }
 
+  val notSharedKafkaSuite = suite("not shared kafka")(
+    shouldHandleNoTopicSpec,
+    returnTopicsNamesSpec,
+    sizeExampleSpec,
+    sizePropertyTestingSpec,
+    partitionCountPropertyTestingSpec,
+  )
+
+  val sharedKafkaSuite = suite("shared kafka")(
+    numRecordPropertyTestingSpec,
+    replicationFactorPropertyTestingSpec,
+    spreadPropertyTestingSpec,
+  )
+
   override def spec = suite("TopicInfoStreamServiceSpec")(
     suite("streamsInfo")(
-      suite("not shared kafka")(
-        shouldHandleNoTopicSpec,
-        returnTopicsNamesSpec,
-        sizeExampleSpec,
-        sizePropertyTestingSpec,
-        partitionCountPropertyTestingSpec,
-      ).provide(
+      notSharedKafkaSuite.provide(
         KafkaTestContainer.kafkaLayer,
         KafkaServiceLive.layer,
         AdminClient.live,
@@ -231,11 +239,7 @@ object TopicInfoStreamServiceSpec extends ZIOSpecDefault {
         TopicInfoStreamServiceLive.layer,
         MakeTopicNameUniqueLive.layer,
       ) @@ sequential,
-      suite("shared kafka")(
-        numRecordPropertyTestingSpec,
-        replicationFactorPropertyTestingSpec,
-        spreadPropertyTestingSpec,
-      ).provideShared(
+      sharedKafkaSuite.provideShared(
         KafkaTestContainer.kafkaLayer,
         KafkaServiceLive.layer,
         AdminClient.live,
