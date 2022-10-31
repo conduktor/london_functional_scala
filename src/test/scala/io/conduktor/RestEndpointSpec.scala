@@ -4,10 +4,10 @@ import io.circe
 import io.circe.{Encoder, Json}
 import io.circe.literal.JsonStringContext
 import io.conduktor.KafkaService.TopicName
+import io.conduktor.v2.TopicInfoPaginatedStreamServiceLive
 import zio.kafka.admin.AdminClient
 import zio.test.{ZIOSpecDefault, _}
 import zio.{Scope, Task, ZIO}
-
 import org.http4s.server.Server
 import org.http4s
 import sttp.client3._
@@ -310,6 +310,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         KafkaTestContainer.kafkaLayer,
         KafkaServiceLive.layer,
         TopicInfoStreamServiceLive.layer,
+        TopicInfoPaginatedStreamServiceLive.layer,
         AdminClient.live,
         KafkaUtils.adminClientSettingsLayer,
         KafkaUtils.producerLayer,
@@ -328,6 +329,7 @@ object RestEndpointSpec extends ZIOSpecDefault {
         RestEndpointsLive.layer,
         KafkaTestContainer.kafkaLayer,
         TopicInfoStreamServiceLive.layer,
+        TopicInfoPaginatedStreamServiceLive.layer,
         KafkaServiceLive.layer,
         AdminClient.live,
         KafkaUtils.adminClientSettingsLayer,

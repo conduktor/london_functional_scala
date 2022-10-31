@@ -14,7 +14,7 @@ import io.conduktor.KafkaService.{
   TopicSize,
 }
 import io.conduktor.TopicInfoStreamService.Info
-import zio.stream.{ZSink, ZStream}
+import zio.stream.{ZSink, ZStream, Stream}
 import zio.{Queue, Task, ZIO, ZLayer}
 
 import scala.collection.immutable.TreeMap
@@ -43,7 +43,7 @@ object TopicInfoStreamService {
   sealed trait Info
   object Info {
     object Complete                                        extends Info
-    case class Topics(topics: Seq[TopicName])              extends Info
+    case class Topics(topics: Set[TopicName])              extends Info
     case class Size(topicName: TopicName, size: TopicSize) extends Info
 
     case class RecordCountInfo(topicName: TopicName, count: RecordCount) extends Info
@@ -61,13 +61,16 @@ object TopicInfoStreamService {
 
 class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoStreamService {
 
-  def streamInfos = ZStream
+  override def streamInfos: Stream[Throwable, Info] = ZStream.unwrap(for {
+    commands <- Queue.unbounded[Command].tap(_.offer(Command.Init))
+  } yield streamInfosInternal(ZStream.fromQueue(commands)))
+
+  def streamInfosInternal(commands: Stream[Throwable, Command]): Stream[Throwable, Info] = ZStream
     .fromZIO(for {
-      queue <- Queue.unbounded[Command]
-      _     <- queue.offer(Command.Init)
-      stream =
+      responses <- Queue.unbounded[Command].tap(_.offer(Command.Init))
+      stream     =
         ZStream
-          .fromQueue(queue)
+          .fromQueue(responses)
           .collectWhileZIO {
             case e: Command.Step          =>
               ZIO.succeed(e)
@@ -82,7 +85,7 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
               .fromIterable(nextCommands)
               .flattenZIO
               .catchAll(e => ZStream.succeed(Command.StopWithError(e)))
-              .run(ZSink.fromQueue(queue))
+              .run(ZSink.fromQueue(responses))
               .fork
               .as(updatedState -> computeInfos(state, updatedState))
           }
@@ -172,7 +175,7 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
 
   private def computeInfos(oldState: State, newState: State): Iterable[Info] = {
     val newNames  = newState.topics.keySet -- oldState.topics.keySet
-    val newTopics = if (newNames.nonEmpty) List(Info.Topics(newNames.toList)) else List.empty
+    val newTopics = if (newNames.nonEmpty) List(Info.Topics(newNames)) else List.empty
 
     newTopics ++ newState.topics.flatMap { case (topicName, newTopicData) =>
       val oldTopicData = oldState.topics.getOrElse(topicName, TopicData.empty)

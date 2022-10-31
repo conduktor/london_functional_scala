@@ -1,9 +1,9 @@
 package io.conduktor
 
-import io.circe.generic.extras.semiauto.deriveConfiguredEncoder
+import io.circe.generic.extras.semiauto.deriveConfiguredCodec
 import sttp.model.sse.ServerSentEvent
 import io.circe.generic.extras.Configuration
-import io.circe.{Codec, Encoder}
+import io.circe.Codec
 import io.circe.generic.semiauto.deriveCodec
 import io.circe.syntax.EncoderOps
 import io.conduktor.CirceCodec._
@@ -21,8 +21,11 @@ import io.conduktor.KafkaService.{
   TopicSize,
 }
 import io.conduktor.TopicInfoStreamService.Info
+import io.conduktor.v2.{Input, TopicInfoPaginatedStreamService}
 import org.http4s._
 import org.http4s.server.Router
+import org.http4s.server.websocket.WebSocketBuilder2
+import sttp.capabilities.zio.ZioStreams
 import sttp.tapir.generic.auto._
 import sttp.tapir.json.circe._
 import sttp.tapir.server.http4s.Http4sServerOptions
@@ -30,14 +33,19 @@ import sttp.tapir.server.http4s.ztapir.{ZHttp4sServerInterpreter, serverSentEven
 import sttp.tapir.server.interceptor.cors.CORSInterceptor
 import sttp.tapir.ztapir._
 import zio.interop.catz._
-import sttp.tapir.{Schema, Validator}
-import zio.{Cause, IO, Task, ZIO, ZLayer}
+import sttp.tapir.{CodecFormat, Schema, Validator}
+import zio.{Cause, IO, Promise, Queue, Task, ZIO, ZLayer}
+import zio.stream.{Stream, ZStream}
 
 trait RestEndpoints {
-  def app: HttpApp[Task]
+  def app(webSocketBuilder: WebSocketBuilder2[Task]): HttpApp[Task]
 }
 
-class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: TopicInfoStreamService) extends RestEndpoints {
+class RestEndpointsLive(
+  kafkaService: KafkaService,
+  topicInfoStreamService: TopicInfoStreamService,
+  topicInfoPaginatedStreamService: TopicInfoPaginatedStreamService,
+) extends RestEndpoints {
 
   case class ErrorInfo(message: String)
 
@@ -58,16 +66,39 @@ class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: Topi
 
   }
 
-  implicit val infoEncoder: Encoder[Info] = {
-    implicit val config: Configuration = Configuration.default.withDiscriminator("type")
-    deriveConfiguredEncoder
-  }
+  implicit val config: Configuration  = Configuration.default.withDiscriminator("type")
+  implicit val infoCodec: Codec[Info] =
+    deriveConfiguredCodec
+
+  implicit val commandCodec: Codec[Input.Command] =
+    deriveConfiguredCodec
 
   val infos = endpoint.get
     .in("streaming")
     .errorOut(jsonBody[ErrorInfo])
     .out(serverSentEventsBody)
     .zServerLogic(_ => ZIO.succeed(topicInfoStreamService.streamInfos.map(info => ServerSentEvent(data = Some(info.asJson.spaces2)))))
+
+  implicit val infoCodecSchema: Schema[Info] = Schema.string[Info] //TODO: improve
+
+  val paginatedInfos = endpoint.get
+    .in("paginated_streaming")
+    .in(query[Int]("pageSize"))
+    .errorOut(jsonBody[ErrorInfo])
+    .out(webSocketBody[Input.Command, CodecFormat.Json, Info, CodecFormat.Json](ZioStreams))
+    .zServerLogic { pageSize =>
+      ZIO.succeed({ (commandStream: Stream[Throwable, Input.Command]) =>
+        ZStream.unwrap(for {
+          queue      <- Queue.unbounded[Input.Command]
+          inputError <- Promise.make[Throwable, Nothing]
+          _          <- commandStream
+                          .tap(queue.offer(_))
+                          .runDrain
+                          .tapError(inputError.fail)
+                          .fork
+        } yield topicInfoPaginatedStreamService.streamInfos(pageSize = pageSize, queue = queue).interruptWhen(inputError))
+      })
+    }
 
   val allTopicsName =
     endpoint.get
@@ -206,9 +237,19 @@ class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: Topi
           .handleError
       }
 
-  val app: HttpApp[Task] = {
+  def app(webSocketBuilder: WebSocketBuilder2[Task]) = {
+    val webSocketRoute: HttpRoutes[Task] = ZHttp4sServerInterpreter(
+      Http4sServerOptions
+        .customiseInterceptors[Task]
+        .corsInterceptor(CORSInterceptor.default[Task])
+        .options
+    ).fromWebSocket(
+      List(
+        paginatedInfos
+      )
+    ).toRoutes(webSocketBuilder)
 
-    val routes: HttpRoutes[Task] = ZHttp4sServerInterpreter(
+    val httpRoute: HttpRoutes[Task] = ZHttp4sServerInterpreter(
       Http4sServerOptions
         .customiseInterceptors[Task]
         .corsInterceptor(CORSInterceptor.default[Task])
@@ -228,16 +269,21 @@ class RestEndpointsLive(kafkaService: KafkaService, topicInfoStreamService: Topi
       )
     ).toRoutes
 
-    Router("/" -> routes).orNotFound
+    Router("ws/" -> webSocketRoute, "/" -> httpRoute).orNotFound
   }
 
 }
 
 object RestEndpointsLive {
-  val layer: ZLayer[KafkaService with TopicInfoStreamService, Nothing, HttpApp[Task]] = ZLayer {
+  val layer: ZLayer[
+    KafkaService with TopicInfoStreamService with TopicInfoPaginatedStreamService,
+    Nothing,
+    RestEndpoints,
+  ] = ZLayer {
     for {
-      kafkaService  <- ZIO.service[KafkaService]
-      streamService <- ZIO.service[TopicInfoStreamService]
-    } yield new RestEndpointsLive(kafkaService, streamService).app
+      kafkaService                    <- ZIO.service[KafkaService]
+      streamService                   <- ZIO.service[TopicInfoStreamService]
+      topicInfoPaginatedStreamService <- ZIO.service[TopicInfoPaginatedStreamService]
+    } yield new RestEndpointsLive(kafkaService, streamService, topicInfoPaginatedStreamService)
   }
 }

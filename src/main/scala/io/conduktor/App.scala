@@ -1,6 +1,6 @@
 package io.conduktor
 
-import org.http4s.HttpApp
+import io.conduktor.v2.TopicInfoPaginatedStreamServiceLive
 import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.server.Server
 import zio._
@@ -9,14 +9,14 @@ import zio.kafka.admin.{AdminClient, AdminClientSettings}
 
 object App extends ZIOAppDefault {
 
-  def serverLayer(port: Int): ZLayer[HttpApp[Task], Throwable, Server] =
+  def serverLayer(port: Int): ZLayer[RestEndpoints, Throwable, Server] =
     ZLayer.scoped(for {
-      app            <- ZIO.service[HttpApp[Task]]
+      restEndpoints  <- ZIO.service[RestEndpoints]
       serverResource <- ZIO.executor.map { executor =>
                           BlazeServerBuilder[Task]
                             .withExecutionContext(executor.asExecutionContext)
                             .bindHttp(port, "localhost")
-                            .withHttpApp(app)
+                            .withHttpWebSocketApp(restEndpoints.app)
                             .resource
                         }
       serverScoped   <- serverResource.toScopedZIO
@@ -32,6 +32,7 @@ object App extends ZIOAppDefault {
       .provide(
         serverLayer(8090),
         RestEndpointsLive.layer,
+        TopicInfoPaginatedStreamServiceLive.layer,
         KafkaServiceLive.layer,
         TopicInfoStreamServiceLive.layer,
         AdminClient.live,
