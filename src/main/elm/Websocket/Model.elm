@@ -22,7 +22,7 @@ type ReplicationFactor
 
 
 type Spread
-    = Spread Int
+    = Spread Float
 
 
 type Datapoint t
@@ -125,7 +125,7 @@ decreasePage model =
     in
     if page > 0 then
         { model
-            | page = Page (pageNumber model.page - 1)
+            | page =  (pageNumber model.page - 1) |> max 0 |> Page
             , topics = []
         }
 

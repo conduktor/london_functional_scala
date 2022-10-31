@@ -51,7 +51,7 @@ tableFormatter =
     , ( "size in bytes", \topic -> topic.sizeInByte |> datapointToCell (\(TopicSize size) -> size |> String.fromInt) )
     , ( "partitions count", \topic -> topic.partitionCount |> datapointToCell (\(PartitionCount count) -> count |> String.fromInt) )
     , ( "records count", \topic -> topic.recordCount |> datapointToCell (\(RecordCount count) -> count |> String.fromInt) )
-    , ( "spread", \topic -> topic.spread |> datapointToCell (\(Spread spread) -> spread |> String.fromInt) )
+    , ( "spread", \topic -> topic.spread |> datapointToCell (\(Spread spread) -> spread |> String.fromFloat) )
     , ( "replication factor", \topic -> topic.replicationFactor |> datapointToCell (\(ReplicationFactor count) -> count |> String.fromInt) )
     ]
 

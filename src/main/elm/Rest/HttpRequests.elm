@@ -41,7 +41,7 @@ replicationFactorDecoder =
 
 
 spreadDecoder =
-    Decode.map Spread Decode.int
+    Decode.map Spread Decode.float
 
 
 topicSizeResponseDecoder : Decode.Decoder (Dict String TopicSize)

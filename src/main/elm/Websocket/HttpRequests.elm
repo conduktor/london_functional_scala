@@ -44,7 +44,7 @@ replicationFactorDecoder =
 
 
 spreadDecoder =
-    Decode.map Spread Decode.int
+    Decode.map Spread Decode.float
 
 
 topicNamesDecoder =

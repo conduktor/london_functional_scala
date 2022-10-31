@@ -24,7 +24,7 @@ type ReplicationFactor
 
 
 type Spread
-    = Spread Int
+    = Spread Float
 
 
 type Datapoint t

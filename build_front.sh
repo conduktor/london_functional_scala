@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -eu
 
-./elm  make src/main/elm/Eventsource/Main.elm --output=src/main/elm/Eventsource/elm.js
-./elm  make src/main/elm/Rest/Main.elm --output=src/main/elm/Rest/elm.js
+elm make src/main/elm/Websocket/Main.elm --output src/main/elm/Websocket/elm.js
+open  src/main/elm/Websocket/index.html
