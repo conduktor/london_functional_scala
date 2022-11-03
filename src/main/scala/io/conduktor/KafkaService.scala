@@ -2,7 +2,7 @@ package io.conduktor
 
 import io.conduktor.KafkaService._
 import zio.kafka.admin.AdminClient
-import zio.kafka.admin.AdminClient.{Node, OffsetSpec, TopicPartitionInfo}
+import zio.kafka.admin.AdminClient.{ListTopicsOptions, Node, OffsetSpec, TopicPartitionInfo}
 import zio.{Task, ZIO, ZLayer}
 
 trait KafkaService {
@@ -119,7 +119,7 @@ object KafkaService {
 class KafkaServiceLive(adminClient: AdminClient) extends KafkaService {
   override def listTopicNames: Task[Seq[TopicName]] =
     adminClient
-      .listTopics()
+      .listTopics(Some(ListTopicsOptions(listInternal = true, timeout = None)))
       .map(_.values.map(listing => TopicName(listing.name)).toList)
 
   override def describeTopics(

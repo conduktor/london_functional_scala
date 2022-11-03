@@ -1,0 +1,42 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>App</title>
+    <script type="text/javascript" src="elm.js"></script>
+</head>
+
+<body>
+<div id="myapp"></div>
+</body>
+
+<script type="text/javascript">
+
+    // Start the Elm application.
+    var app = Elm.Websocket.Main.init({
+        node: document.getElementById('myapp')
+    });
+
+    let ws = new WebSocket('ws://localhost:8090/ws/paginated_streaming?pageSize=20');
+
+    app.ports.sendMessage.subscribe(function(message) {
+        ws.send(message);
+    });
+
+    ws.addEventListener("open", function(event) {
+        app.ports.notifyReady.send("_");
+    });
+
+
+    // When a message comes into our WebSocket, we pass the message along
+    // to the `messageReceiver` port.
+    ws.addEventListener("message", function(event) {
+        app.ports.messageReceiver.send(event.data);
+    });
+
+    // If you want to use a JavaScript library to manage your WebSocket
+    // connection, replace the code in JS with the alternate implementation.
+</script>
+
+</html>

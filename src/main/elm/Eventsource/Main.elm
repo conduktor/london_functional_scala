@@ -47,6 +47,15 @@ type Msg
     | SubscriptionMessage String
 
 
+failure : String -> ( Model, Cmd Msg )
+failure msg =
+    let
+        _ =
+            Debug.log msg
+    in
+    ( Failure msg, Cmd.none )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of
@@ -63,50 +72,50 @@ update msg model =
             )
 
         ( HttpMessage (HttpRequests.Msg (Ok (GotNames _))), _ ) ->
-            ( Failure "received GotNames while not being loading names", Cmd.none )
+            failure "received GotNames while not being loading names"
 
         -- FIXME should work
         ( HttpMessage (HttpRequests.Msg (Ok (GotSize topicName topicSizes))), Started topicInfos ) ->
             ( Started (applySize topicSizes topicName topicInfos), Cmd.none )
 
         ( HttpMessage (HttpRequests.Msg (Ok (GotSize _ _))), LoadingNames ) ->
-            ( Failure "other error", Cmd.none )
+            failure "Got sizes without having names"
 
         -- FIXME error case
         ( HttpMessage (HttpRequests.Msg (Ok (GotRecordCount topicName recordCount))), Started topicInfos ) ->
             ( Started (applyRecordCount recordCount topicName topicInfos), Cmd.none )
 
         ( HttpMessage (HttpRequests.Msg (Ok (GotRecordCount _ _))), LoadingNames ) ->
-            ( Failure "other error", Cmd.none )
+            failure "Got record counts without having names"
 
         -- FIXME error case
         ( HttpMessage (HttpRequests.Msg (Ok (GotPartitionCount topicName partitionCount))), Started topicInfos ) ->
             ( Started (applyPartitionCount partitionCount topicName topicInfos), Cmd.none )
 
         ( HttpMessage (HttpRequests.Msg (Ok (GotPartitionCount _ _))), LoadingNames ) ->
-            ( Failure "other error", Cmd.none )
+            failure "Got partition counts without having names"
 
         -- FIXME error case
         ( HttpMessage (HttpRequests.Msg (Ok (GotReplicationFactor topicName replicationFactor))), Started topicInfos ) ->
             ( Started (applyReplicationFactor replicationFactor topicName topicInfos), Cmd.none )
 
         ( HttpMessage (HttpRequests.Msg (Ok (GotReplicationFactor _ _))), LoadingNames ) ->
-            ( Failure "other error", Cmd.none )
+            failure "Got replication factor without having names"
 
         -- FIXME error case
         ( HttpMessage (HttpRequests.Msg (Ok (GotSpread topicName spread))), Started topicInfos ) ->
             ( Started (applySpread spread topicName topicInfos), Cmd.none )
 
         ( HttpMessage (HttpRequests.Msg (Ok (GotSpread _ _))), LoadingNames ) ->
-            ( Failure "other error", Cmd.none )
+            failure "Got spread without having names"
 
         -- FIXME error case
         ( HttpMessage (HttpRequests.Msg (Ok Complete)), _ ) ->
             ( model, Cmd.none )
 
         -- FIXME error case
-        ( HttpMessage _, Failure _ ) ->
-            ( Failure "other error", Cmd.none )
+        ( HttpMessage _, Failure f ) ->
+            ( Failure f, Cmd.none )
 
         ( SubscriptionMessage text, state ) ->
             let
