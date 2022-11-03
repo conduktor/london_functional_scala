@@ -48,7 +48,6 @@ class TopicInfoPaginatedStreamServiceLive(kafkaService: KafkaService) extends To
         })
       }
 
-  //TODO: deal with update/deleted
   def toInfo(state: State, diff: Diff): List[Info] =
     (diff match {
       case _: Diff.TopicNames =>
@@ -94,7 +93,7 @@ class TopicInfoPaginatedStreamServiceLive(kafkaService: KafkaService) extends To
   }
 
   def nextRequests(state: State, diff: Diff): List[Request] =
-    if (state.isEmpty) List(Request.FetchTopicNames, Request.FetchBrokerIds) //TODO: reconsidere
+    if (state.isEmpty) List(Request.FetchTopicNames, Request.FetchBrokerIds)
     else
       diff match {
         case diff: Diff.Brokers =>

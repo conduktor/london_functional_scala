@@ -5400,7 +5400,10 @@ var $author$project$Websocket$Model$decreasePage = function (model) {
 		model,
 		{
 			page: $author$project$Websocket$Model$Page(
-				$author$project$Websocket$Model$pageNumber(model.page) - 1),
+				A2(
+					$elm$core$Basics$max,
+					0,
+					$author$project$Websocket$Model$pageNumber(model.page) - 1)),
 			topics: _List_Nil
 		}) : model;
 };

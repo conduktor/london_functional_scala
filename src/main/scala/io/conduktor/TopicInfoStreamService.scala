@@ -266,7 +266,6 @@ class TopicInfoStreamServiceLive(kafkaService: KafkaService) extends TopicInfoSt
     def empty: State = State(maybeTopics = None, brokerCount = None)
   }
 
-  //TODO: build an ADT for commands and an interpreter to split Commands from Responses
   private sealed trait Command
   private object Command {
     final case class StopWithError(error: Throwable) extends Command

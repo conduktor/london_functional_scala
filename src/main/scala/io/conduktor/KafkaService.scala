@@ -109,7 +109,7 @@ object KafkaService {
         ReplicationFactor(
           topicDescription.partitions.map(_.replicas.length).head
         ),
-      ) //TODO: rework head?
+      )
 
   }
 
