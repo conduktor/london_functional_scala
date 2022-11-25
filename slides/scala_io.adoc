@@ -1,0 +1,172 @@
+= When stateless APIs are not enough: deep dive into a  streaming backend design
+
+{localdate} - Luc Duzan & Matthieu Baechler
+
+:revealjs_hash: true
+:revealjs_slideNumber: true
+:revealjs_fragmentInURL: true
+:imagesdir: ./images
+:sourcedir: ../src/main/scala
+
+<<<
+== Who are we?
+
+[.columns]
+[.column]
+image::luc.jpg[width=300]
+
+Luc Duzan
+
+ * Software Engineer @ Conduktor
+ * Bike enthusiast 🚲
+ * @strokyl on twitter
+
+[.column]
+image::matthieu.jpg[width=300]
+
+Matthieu Baechler (@mbaechler)
+
+ * Older Software Engineer @ Conduktor
+ * Free Software enthusiat
+ * @m_baechler on twitter
+
+
+<<<
+== ⚠️ Disclaimers
+
+ * We are going to speak about UX
+ * This design is not new
+
+<<<
+== We are Conduktor
+
+image::conduktor.png[]
+
+<<<
+== A few facts & metrics about Kafka
+
+* Kafka is built to be fast at publishing and consuming messages
+* Scale can be massive
+  - ~ 1 000 topics
+  - ~ 100 000 partitions
+  - ~ millions of messages per second
+* Not so fast at providing insights about your data and your cluster
+
+<<<
+== What Conduktor console looks like
+
+
+image::conduktor-console.png[]
+
+<<<
+== What’s behind this screen
+
+image::dependency-graph.png[]
+
+<<<
+== Solution 1: Single request
+
+We have GraphQL, let’s load everything (20 topics) at once for our screen
+
+image::graphql.png[]
+
+<<<
+== Solution 2: Query in two steps
+
+What about loading all topic names then query details for displayed topics?
+
+image::split-graphql.png[]
+
+<<<
+== API granularity
+
+What about loading all topic names then query details for displayed topics?
+
+FIXME
+
+image::granularity.png[]
+
+<<<
+== Solution 3: Streaming design
+
+image::streaming.png[]
+
+<<<
+== Streaming design: tapir endpoint definition
+
+[source,scala]
+----
+trait TopicInfoStreamService {
+ def streamInfos: ZStream[Any, Throwable, Info]
+}
+
+val infos = endpoint.get
+ .in("streaming")
+ .errorOut(jsonBody[ErrorInfo])
+ .out(serverSentEventsBody)
+ .zServerLogic(_ =>
+   ZIO.succeed(topicInfoStreamService.streamInfos.map { info =>
+     ServerSentEvent(data = Some(info.asJson.spaces2))
+   })
+ )
+----
+
+<<<
+== Streaming design: ADT
+
+[source,scala]
+----
+sealed trait Info
+
+case object Complete                                                              extends Info
+case class Topics(topics: Set[TopicName])                                         extends Info
+case class Size(topicName: TopicName, size: TopicSize)                            extends Info
+case class RecordCountInfo(topicName: TopicName, count: RecordCount)              extends Info
+case class PartitionInfo(topicName: TopicName, partition: Partition)              extends Info
+case class ReplicationFactorInfo(topicName: TopicName, factor: RepFactor)         extends Info
+case class SpreadInfo(topicName: TopicName, spread: Spread)                       extends Info
+----
+
+<<<
+== Streaming design: service implementation
+
+[source,scala]
+----
+def streamInfos: Stream[Info] =
+ streamThings { queue =>
+   for {
+     names <- kafkaService.listTopicNames.map(_.toSet).tap(queue.sendNames)
+
+     brokerIds  <- kafkaService.getBrokerIds
+     brokerCount = BrokerCount(brokerIds.length)
+
+     _ <- kafkaService.getTopicSize(brokerIds).forEachZIO(queue.sendSizes)
+
+     _ <- describeTopics(names.toList)
+            .tap(queue.sendSpreadPartitionAndReplicationFactor(brokerCount))
+            .viaFunction(countRecordForPartitions)
+            .tap(queue.sendRecordCount)
+            .runDrain
+
+     _ <- queue.complete
+   } yield ()
+ }
+----
+
+<<<
+== Key takeaways
+
+* Streaming endpoint:
+  - no trade off between latency and overall runtime
+  - Make frontend code simple
+  - Simple to implement in backend part
+
+<<<
+== What’s next?
+
+After loading the list of topics, what is the user going to do next?
+
+image::one-does-not.png[]
+
+<<<
+== Why not prefetch on frontend

@@ -19,10 +19,11 @@ import zio.{Queue, Task, ZIO, ZLayer}
 
 import scala.collection.immutable.TreeMap
 
+// tag::TopicInfoStreamService[]
 trait TopicInfoStreamService {
-
   def streamInfos: ZStream[Any, Throwable, Info]
 }
+// end::TopicInfoStreamService[]
 
 object TopicInfoStreamService {
 

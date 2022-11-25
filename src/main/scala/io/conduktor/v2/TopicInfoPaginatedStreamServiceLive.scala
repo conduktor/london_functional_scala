@@ -61,14 +61,14 @@ class TopicInfoPaginatedStreamServiceLive(kafkaService: KafkaService) extends To
 
       case instance: Diff.BeginOffset =>
         val topics = instance.added.keys.map(_.topicName).toSet
-        buildRecordCountInfo(state, topics.filter(state.topicInPage.contains))
+        buildRecordCountInfo(state, topics.intersect(state.topicInPage))
 
       case instance: Diff.EndOffset =>
         val topics = instance.added.keys.map(_.topicName).toSet
-        buildRecordCountInfo(state, topics.filter(state.topicInPage.contains))
+        buildRecordCountInfo(state, topics.intersect(state.topicInPage))
 
       case instance: Diff.Description =>
-        buildDescriptionInfo(state, instance.added.keySet.filter(state.topicInPage.contains(_)))
+        buildDescriptionInfo(state, instance.added.keySet.intersect(state.topicInPage))
       case Diff.Empty                 => Nil
       case Diff.NewPage(_)            =>
         //TODO: send all data already know about page
@@ -102,7 +102,8 @@ class TopicInfoPaginatedStreamServiceLive(kafkaService: KafkaService) extends To
 
         case diff: Diff.TopicNames =>
           val hasTopicNames         = diff.added.nonEmpty
-          val fetchTopicSize        = state.brokers.whenLoaded(brokerIds => Option.when(hasTopicNames)(Request.FetchTopicSize(brokerIds)).toList)
+          val fetchTopicSize        = state.brokers.whenLoaded(
+            brokerIds => Option.when(hasTopicNames)(Request.FetchTopicSize(brokerIds)).toList)
           val fetchTopicDescription = nextTopicDescriptionsToFetch(state)
 
           fetchTopicSize ++ fetchTopicDescription
