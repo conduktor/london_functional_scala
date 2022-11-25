@@ -200,4 +200,201 @@ FIXME
 
 image::streaming-3.png[]
 
+<<<
+== Step by step execution
+Command: Subscribe
 
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+
+|[.pre-wrap]
+{
+  Topics = #Loading#,
+  BrokerIds = Loading,
+  Descriptions = {}
+}
+|
+[source,hocon]
+----
+[
+  ListTopics,
+  ListBrokers
+]
+----
+|
+[source,hocon]
+----
+Nil
+----
+|===
+
+<<<
+=== Step by step execution
+
+Command: TopicNames [foo, bar]
+
+[.columns]
+[.column]
+State
+
+[source,hocon]
+----
+{
+  Topics = [foo, bar],
+  BrokerIds = Loading,
+  Descriptions =
+    { foo = Loading
+    , bar = Loading
+    }
+}
+----
+
+Requests
+
+[source,hocon]
+----
+[
+  ListBrokers,
+  DescribeTopics[foo, bar]
+]
+----
+
+Output
+[source,hocon]
+----
+[
+  TopicNames[foo, bar]
+]
+----
+
+
+<<<
+=== Step by step execution
+
+Command: Topics description for [foo, bar]
+
+[.columns]
+[.column]
+State
+
+[source,hocon]
+----
+{
+  Topics = [foo, bar],
+  BrokerIds = [b1, b2],
+  Descriptions =
+    { foo:
+      { partitions: 3,
+        replicationFactor: 3}
+    , bar:
+      { partitions: 2,
+        replicationFactor: 3}
+    }
+}
+----
+
+Requests
+
+[source,hocon]
+----
+[
+  DescribeLogDirs[b1, b2],
+  ListBeginOffset[
+     foo-1, foo-2, foo-3,
+     bar-1, bar-2],
+  ListEndOffset[
+     foo-1, foo-2, foo-3,
+     bar-1, bar-2],
+]
+----
+
+Output
+[source,hocon]
+----
+[
+  ReplicationFactor(foo, 3),
+  Partition(foo, 3),
+  Spread(foo, 1),
+  ReplicationFactor(foo, 3),
+  Partition(foo, 2),
+  Spread(foo, 1),
+]
+----
+
+<<<
+=== Streaming “loop”
+
+image::streaming-4.png[]
+
+<<<
+=== Stateful Streaming design
+
+[source,scala]
+----
+def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
+ ZStream
+   .unwrap(for {
+     responsesQueue       <- Queue.unbounded[Input.Response]
+     inputs: Stream[Input] = ZStream.mergeAllUnbounded(
+                                         ZStream.fromQueue(queue),
+                                         ZStream.fromQueue(responsesQueue))
+   } yield {
+     inputs
+       .mapAccumZIO(State.empty) { (state, input) =>
+         val (stateUpdatedWithInput, diff) = applyInput(state, input)
+         val requests                      = nextRequests(stateUpdatedWithInput, diff)
+         val updatedState                  = applyRequests(stateUpdatedWithInput, requests)
+         val infos                         = toInfo(updatedState, diff)
+         executeRequests(responsesQueue)(requests).as((updatedState, infos))
+       }
+   })
+----
+
+<<<
+=== Stateful streaming design: sum up
+
+* State lifetime is simply linked to stream lifetime
+* We can cleany delegate the implementation of business logic in three pure functions:
+  - updateState: user command/response from external resource => new state
+  - nextCommand: state => commands to perform on external system
+  - frontendView: state diff => informations to send to frontend
+
+<<<
+=== When not to use that
+
+* CQRS
+* Your datasource is fast anyway
+
+<<<
+== Takeaways
+
+image::takeaway-0.png[]
+
+<<<
+=== Takeaways
+
+image::takeaway-1.png[]
+
+<<<
+=== Takeaways
+
+image::takeaway-2.png[]
+
+<<<
+=== Takeaways
+
+image::takeaway-0.png[]
+image::takeaway-1.png[]
+image::takeaway-2.png[]
+
+<<<
+== Resources
+
+https://github.com/conduktor/scalaIO_2022
+
+image::qrcode.png[]
+
+
+[.questions]
+=== !
