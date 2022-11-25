@@ -170,3 +170,34 @@ image::one-does-not.png[]
 
 <<<
 == Why not prefetch on frontend
+
+FIXME
+
+<<<
+== We now have a stateful backend
+
+* We need to keep a state between “requests”
+* Bind the state lifetime with the client connection
+
+<<<
+== Long living stream + commands
+
+image::streaming-1.png[]
+
+<<<
+== Long living stream + commands
+
+image::streaming-2.png[]
+
+<<<
+== How to handle state in streams: mapAccum(ZIO)
+
+FIXME
+
+
+<<<
+=== How to handle state in streams: mapAccum(ZIO)
+
+image::streaming-3.png[]
+
+
