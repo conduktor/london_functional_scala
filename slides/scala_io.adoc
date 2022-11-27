@@ -9,26 +9,30 @@
 :sourcedir: ../src/main/scala
 
 <<<
+[.columns]
 == Who are we?
 
-[.columns]
 [.column]
-image::luc.jpg[width=300]
+--
+image::luc.jpg[width=150]
 
 Luc Duzan
 
  * Software Engineer @ Conduktor
  * Bike enthusiast 🚲
  * @strokyl on twitter
+--
 
 [.column]
-image::matthieu.jpg[width=300]
+--
+image::matthieu.jpg[width=150]
 
 Matthieu Baechler (@mbaechler)
 
  * Older Software Engineer @ Conduktor
  * Free Software enthusiat
  * @m_baechler on twitter
+--
 
 
 <<<
