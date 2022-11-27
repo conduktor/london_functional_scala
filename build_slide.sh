@@ -3,16 +3,21 @@
 SCRIPTPATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
 docker run \
-	--rm \
 	--user $UID \
-	-v $SCRIPTPATH:/documents asciidoctor/docker-asciidoctor asciidoctor-revealjs \
+	-v $SCRIPTPATH:/documents \
+	--rm \
+	asciidoctor/docker-asciidoctor asciidoctor-revealjs \
+	-w \
+	-v \
 	-a icons=font \
 	-a experimental=true \
 	-a idprefix= \
 	-a idseparator=- \
 	-a screenshot-dir-name=screenshots \
-	-a source-highlighter=highlightjs \
-	-a highlightjs-theme=lib/highlight/styles/gruvbox-dark.min.css \
+	-a source-highlighter=highlight.js \
+	-a highlightjsdir=highlight \
+	-a highlightjs-languages=scala,yaml \
+	-a highlightjs-theme=highlight/styles/default.min.css \
 	-a revealjsdir=https://cdnjs.cloudflare.com/ajax/libs/reveal.js/3.8.0 \
 	-a revealjs_transition=slide \
 	-a revealjs_theme=white \
