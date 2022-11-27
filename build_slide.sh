@@ -15,6 +15,7 @@ docker run \
 	-a highlightjs-theme=lib/highlight/styles/gruvbox-dark.min.css \
 	-a revealjsdir=https://cdnjs.cloudflare.com/ajax/libs/reveal.js/3.8.0 \
 	-a revealjs_transition=slide \
+	-a revealjs_theme=white \
 	-a revealjs_slideNumber=true \
 	-a revealjs_width=1100 \
 	-a revealjs_height=700 \
