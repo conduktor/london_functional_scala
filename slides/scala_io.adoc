@@ -14,7 +14,7 @@
 
 [.column]
 --
-image::luc.jpg[width=150]
+image::luc.jpg[width=200]
 
 Luc Duzan
 
@@ -25,9 +25,9 @@ Luc Duzan
 
 [.column]
 --
-image::matthieu.jpg[width=150]
+image::matthieu.jpg[width=200]
 
-Matthieu Baechler (@mbaechler)
+Matthieu Baechler
 
  * Older Software Engineer @ Conduktor
  * Free Software enthusiat
