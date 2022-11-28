@@ -1,10 +1,11 @@
 = When stateless APIs are not enough: deep dive into a  streaming backend design
 
-{localdate} - Luc Duzan & Matthieu Baechler
+Luc Duzan & Matthieu Baechler
 
 :revealjs_hash: true
 :revealjs_slideNumber: true
 :revealjs_fragmentInURL: true
+:revealjs_center: false
 :imagesdir: ./images
 :sourcedir: ../src/main/scala
 
@@ -230,6 +231,7 @@ FIXME: paste mapAccum with mask of the middle
 image::streaming-3.png[]
 
 <<<
+[transition=fade-in]
 == Step by step execution
 Command: Subscribe
 
@@ -261,6 +263,7 @@ Command: Subscribe
 |===
 
 <<<
+[transition=fade-in]
 === Step by step execution
 Command: TopicNames [foo, bar]
 
@@ -297,6 +300,7 @@ Command: TopicNames [foo, bar]
 |===
 
 <<<
+[transition=fade-in]
 === Step by step execution
 Command: BrokerIds  [b1, b2]
 
@@ -332,6 +336,7 @@ Command: BrokerIds  [b1, b2]
 
 
 <<<
+[transition=fade-in]
 === Step by step execution
 Command: Topics description for  [foo, bar]
 
