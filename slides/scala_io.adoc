@@ -149,9 +149,6 @@ case class SpreadInfo(topicName: TopicName, spread: Spread)                     
 <<<
 === Streaming design: service implementation
 
-FIXME: source code is too long
-FIXME: add spotlight
-
 [source,scala]
 ----
 def streamInfos: Stream[Info] =

@@ -22,8 +22,9 @@ docker run \
 	-a revealjs_transition=slide \
 	-a revealjs_theme=white \
 	-a revealjs_slideNumber=true \
-	-a revealjs_width=1500 \
+	-a revealjs_width=1800 \
 	-a revealjs_height=900 \
+	-a customcss=slides/code.css \
 	-a revealjs_plugins=slides/revealjs-plugins/revealjs-plugins.js \
 	-a revealjs_plugins_configuration=slides/revealjs-plugins/revealjs-plugins-conf.js \
 	-a docinfo=shared \

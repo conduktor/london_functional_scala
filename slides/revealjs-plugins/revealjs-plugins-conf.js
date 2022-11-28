@@ -46,7 +46,7 @@ notes_pointer: {
 // SPOTLIGHT PLUGIN https://github.com/denniskniep/reveal.js-plugin-spotlight
 //
 spotlight: {
-	size: 120, // size of the spotlight
+	size: 80, // size of the spotlight
 	lockPointerInsideCanvas: false, // true: Locks the mouse pointer inside the presentation
 	toggleSpotlightOnMouseDown: true, // toggle spotlight by holding down the mouse key
 	spotlightCursor: 'none', // choose the cursor when spotlight is on
@@ -62,7 +62,6 @@ spotlight: {
 menu: {
 	numbers: true, // Add slide numbers to the titles in the slide list.
 	titleSelector: 'h1, h2, div.title, caption.title, #toctitle', // Specifies which slide elements will be used for generating the slide titles in the menu. 
-	transitions: true, // Specifies if the transitions menu panel will be shown.
 	openButton: true, // Adds a menu button to the slides to open the menu panel.
 	openSlideNumber: false, // If 'true' allows the slide number in the presentation to open the menu panel
 	loadIcons: true, // By default the menu will load it's own font-awesome library icons
@@ -81,11 +80,6 @@ menu: {
 			<h3>Notes Pointer / Spotlight</h3>
 			<p>O : Toggle pointer on/off</p>
 			<p>L or (X then LEFT CLICK) : Toggle spotlight on/off</p>
-		</li>
-		<li class="slide-menu-item">
-			<h3>Skip fragments</h3>
-			<p>PageDown : Show all fragments</p>
-			<p>PageUp : Show no fragment</p>
 		</li>
 		<li class="slide-menu-item">
 			<h3>Chalkboard</h3>
@@ -110,49 +104,6 @@ menu: {
 			<p>END : Bottom</p>
 			<p>SPACE or RETURN : Selection</p>
 			<p>ESC : Close menu</p>
-		</li>
-		<li class="slide-menu-item">
-			<h3>Custom</h3>
-			<p>I : ../index.html</p>
-		</li></ul>` }
-	],
-  	themes: [// Specifies the themes that will be available in the themes menu panel. Set to 'true' to show the themes menu panel with the default themes list. 
-		{ name: '########## light ##########', theme: 'themes/css/reveal-zenika-light.css' },
-		{ name: 'code-html-multicolor', theme: 'themes/css/reveal-code-html-multicolor.css' },
-		{ name: 'code-java-blue', theme: 'themes/css/reveal-code-java-blue.css' },
-		{ name: 'code-layers-multicolor', theme: 'themes/css/reveal-code-layers-multicolor.css' },
-		{ name: 'code-php-multicolor', theme: 'themes/css/reveal-code-php-multicolor.css' },
-		{ name: 'containers', theme: 'themes/css/reveal-containers.css' },
-		{ name: 'containers-cartoon', theme: 'themes/css/reveal-containers-cartoon.css' },
-		{ name: 'containers-miniature', theme: 'themes/css/reveal-containers-miniature.css' },
-		{ name: 'matrix-numbers', theme: 'themes/css/reveal-matrix-numbers.css' },
-		{ name: 'security-binary-lock', theme: 'themes/css/reveal-security-binary-lock.css' },
-		{ name: 'zenika-algeria-timgad', theme: 'themes/css/reveal-zenika-algeria-timgad.css' },
-		{ name: 'zenika-argentina-perito-moreno', theme: 'themes/css/reveal-zenika-argentina-perito-moreno.css' },
-		{ name: 'zenika-brest-sea', theme: 'themes/css/reveal-zenika-brest-sea.css' },
-		{ name: 'zenika-helm-boat', theme: 'themes/css/reveal-zenika-helm-boat.css' },
-		{ name: 'zenika-iceland-blocks', theme: 'themes/css/reveal-zenika-iceland-blocks.css' },
-		{ name: 'zenika-iceland-waterfall-zenikanard', theme: 'themes/css/reveal-zenika-iceland-waterfall-zenikanard.css' },
-		{ name: 'zenika-iceland-white', theme: 'themes/css/reveal-zenika-iceland-white.css' },
-		{ name: 'zenika-japan-roe', theme: 'themes/css/reveal-zenika-japan-biche.css' },
-		{ name: 'zenika-japan-fujisan', theme: 'themes/css/reveal-zenika-japan-fujisan.css' },
-		{ name: 'zenika-japan-garden', theme: 'themes/css/reveal-zenika-japan-garden.css' },
-		{ name: 'zenika-ocean-boats', theme: 'themes/css/reveal-zenika-ocean-boats.css' },
-		{ name: 'zenika-pilat-back', theme: 'themes/css/reveal-zenika-pilat-back.css' },
-		{ name: 'zenika-rock-climbing', theme: 'themes/css/reveal-zenika-rock-climbing.css' },
-		{ name: 'zenika-thailand-back', theme: 'themes/css/reveal-zenika-thailand-back.css' },
-		{ name: 'zenika-thailand-shirt', theme: 'themes/css/reveal-zenika-thailand-shirt.css' },
-		{ name: '########## dark ##########', theme: 'themes/css/reveal-zenika-dark.css' },
-		{ name: 'code-html-green', theme: 'themes/css/reveal-code-html-green.css' },
-		{ name: 'code-html-pink', theme: 'themes/css/reveal-code-html-pink.css' },
-		{ name: 'code-php-dark', theme: 'themes/css/reveal-code-php-dark.css' },
-		{ name: 'code-python', theme: 'themes/css/reveal-code-python.css' },
-		{ name: 'containers-dark', theme: 'themes/css/reveal-containers-dark.css' },
-		{ name: 'matrix-cuneiform', theme: 'themes/css/reveal-matrix-cuneiform.css' },
-		{ name: 'zenika-cambodia-sunset', theme: 'themes/css/reveal-zenika-cambodia-sunset.css' },
-		{ name: 'zenika-japan-shibuya', theme: 'themes/css/reveal-zenika-japan-shibuya.css' },
-		{ name: 'zenika-japan-street-old', theme: 'themes/css/reveal-zenika-japan-street-old.css' },
-		{ name: 'zenika-japan-table', theme: 'themes/css/reveal-zenika-japan-table.css' },
-		{ name: 'zenika-music-beatles', theme: 'themes/css/reveal-zenika-beatles.css' },
-		{ name: 'zenika-scuba-diving', theme: 'themes/css/reveal-zenika-scuba-diving.css' }]
+		</li>` }
+	]
 }
