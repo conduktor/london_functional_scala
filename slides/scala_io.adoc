@@ -34,69 +34,83 @@ Matthieu Baechler
  * @m_baechler on twitter
 --
 
-
 <<<
-== ⚠️ Disclaimers
+=== We are Conduktor
 
- * We are going to speak about UX
- * This design is not new
-
-<<<
-== We are Conduktor
-
+[.maxed-image]
 image::conduktor.png[]
 
-<<<
-== A few facts & metrics about Kafka
 
-* Kafka is built to be fast at publishing and consuming messages
+<<<
+=== We are doing High Fidelity tools
+
+[%step]
+ * Seeking best UX
+[%step]
+   - Discoverability
+   - Precision
+   - Best latency
+
+
+<<<
+== Speaking about Kafka
+
+[%step]
 * Scale can be massive
   - ~ 1 000 topics
   - ~ 100 000 partitions
   - ~ millions of messages per second
-* Not so fast at providing insights about your data and your cluster
+* Fast
+  - publishing messages
+  - consuming messages
+* Not Fast
+  - metadata
 
 <<<
-== What Conduktor console looks like
+== Conduktor Console
 
 
 image::conduktor-console.png[]
 
 <<<
-== What’s behind this screen
+== Behind this screen
 
 image::dependency-graph.png[]
 
 <<<
-== Solution 1: Single request
+== Exploring solutions
+
+
+<<<
+=== Solution 1: Single request
 
 We have GraphQL, let’s load everything (20 topics) at once for our screen
+
+FIXME: put code snippet
 
 image::graphql.png[]
 
 <<<
-== Solution 2: Query in two steps
+=== Solution 2: Query in two steps
 
 What about loading all topic names then query details for displayed topics?
 
 image::split-graphql.png[]
 
 <<<
-== API granularity
+=== API granularity
 
 What about loading all topic names then query details for displayed topics?
 
-FIXME
-
-image::granularity.png[]
+image::api-granularity.excalidraw.png[]
 
 <<<
-== Solution 3: Streaming design
+=== Solution 3: Streaming design
 
 image::streaming.png[]
 
 <<<
-== Streaming design: tapir endpoint definition
+=== Streaming design: tapir endpoint definition
 
 [source,scala]
 ----
@@ -116,7 +130,7 @@ val infos = endpoint.get
 ----
 
 <<<
-== Streaming design: ADT
+=== Streaming design: ADT
 
 [source,scala]
 ----
@@ -132,7 +146,10 @@ case class SpreadInfo(topicName: TopicName, spread: Spread)                     
 ----
 
 <<<
-== Streaming design: service implementation
+=== Streaming design: service implementation
+
+FIXME: source code is too long
+FIXME: add spotlight
 
 [source,scala]
 ----
@@ -160,47 +177,55 @@ def streamInfos: Stream[Info] =
 <<<
 == Key takeaways
 
-* Streaming endpoint:
-  - no trade off between latency and overall runtime
-  - Make frontend code simple
-  - Simple to implement in backend part
+[%step]
+* Streaming endpoint
+[%step]
+  - No trade off between latency and overall run time
+  - No impact on frontend code complexity
+  - Very few changes in backend part
 
 <<<
+[%notitle]
 == What’s next?
 
-After loading the list of topics, what is the user going to do next?
-
+[.maxed-image]
 image::one-does-not.png[]
 
 <<<
-== Why not prefetch on frontend
+== Loading next page
 
-FIXME
+[%step]
+Prefetch?
 
 <<<
-== We now have a stateful backend
+=== frontend prefetch
 
+FIXME: diagram with steps already fetched highlighted
+
+<<<
+=== stateful backend
+
+[%step]
 * We need to keep a state between “requests”
 * Bind the state lifetime with the client connection
 
 <<<
-== Long living stream + commands
+=== Long living stream + commands
 
 image::streaming-1.png[]
 
 <<<
-== Long living stream + commands
+=== Long living stream + commands
 
 image::streaming-2.png[]
 
 <<<
-== How to handle state in streams: mapAccum(ZIO)
+== Mealy machine aka mapAccum(ZIO)
 
-FIXME
-
+FIXME: paste mapAccum with mask of the middle
 
 <<<
-=== How to handle state in streams: mapAccum(ZIO)
+=== Mealy machine aka mapAccum(ZIO)
 
 image::streaming-3.png[]
 
@@ -211,123 +236,160 @@ Command: Subscribe
 [cols="a, a, a"]
 |===
 |State |Requests |Output
-
-|[.pre-wrap]
-{
-  Topics = #Loading#,
-  BrokerIds = Loading,
-  Descriptions = {}
-}
 |
-[source,hocon]
+[source,json5,highlight=2..4]
+----
+{
+  "Topics": "Loading",
+  "BrokerIds": "Loading",
+  "Descriptions": {}
+}
+----
+|
+[source,json5,highlight=2..3]
 ----
 [
-  ListTopics,
-  ListBrokers
+  "ListTopics",
+  "ListBrokers"
 ]
 ----
 |
-[source,hocon]
+[source,json5,highlight=1]
 ----
-Nil
+[]
 ----
 |===
 
 <<<
 === Step by step execution
-
 Command: TopicNames [foo, bar]
 
-[.columns]
-[.column]
-State
-
-[source,hocon]
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight='2,4..6']
 ----
 {
-  Topics = [foo, bar],
-  BrokerIds = Loading,
-  Descriptions =
-    { foo = Loading
-    , bar = Loading
+  "Topics": ["foo", "bar"],
+  "BrokerIds": "Loading",
+  "Descriptions":
+    { "foo": "Loading"
+    , "bar": "Loading"
     }
 }
 ----
-
-Requests
-
-[source,hocon]
+|
+[source,json5,highlight=3]
 ----
 [
-  ListBrokers,
-  DescribeTopics[foo, bar]
+  "ListBrokers",
+  "DescribeTopics[foo, bar]"
 ]
 ----
-
-Output
-[source,hocon]
+|
+[source,json5,highlight=2]
 ----
 [
-  TopicNames[foo, bar]
+  "TopicNames[foo, bar]"
 ]
 ----
+|===
+
+<<<
+=== Step by step execution
+Command: BrokerIds  [b1, b2]
+
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight='3']
+----
+{
+  "Topics": ["foo", "bar"],
+  "BrokerIds": ["b1", "b2"],
+  "Descriptions":
+    { "foo": "Loading"
+    , "bar": "Loading"
+    }
+}
+----
+|
+[source,json5,highlight=3]
+----
+[
+  "DescribeTopics[foo, bar]",
+  "DescribeLogDirs[b1, b2]"
+]
+----
+|
+[source,json5,highlight=2]
+----
+[]
+----
+|===
 
 
 <<<
 === Step by step execution
+Command: Topics description for  [foo, bar]
 
-Command: Topics description for [foo, bar]
-
-[.columns]
-[.column]
-State
-
-[source,hocon]
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight='5..11']
 ----
 {
-  Topics = [foo, bar],
-  BrokerIds = [b1, b2],
-  Descriptions =
-    { foo:
-      { partitions: 3,
-        replicationFactor: 3}
-    , bar:
-      { partitions: 2,
-        replicationFactor: 3}
-    }
+ "Topics": ["foo", "bar"],
+ "BrokerIds": ["b1", "b2"],
+ "Descriptions":
+ { "foo":
+   { "partitions": 3,
+     "replicationFactor": 3}
+ , "bar":
+   { "partitions": 2,
+     "replicationFactor": 3}
+ }
 }
 ----
-
-Requests
-
-[source,hocon]
+|
+[source,json5,highlight=3..14]
 ----
 [
-  DescribeLogDirs[b1, b2],
-  ListBeginOffset[
-     foo-1, foo-2, foo-3,
-     bar-1, bar-2],
-  ListEndOffset[
-     foo-1, foo-2, foo-3,
-     bar-1, bar-2],
+ DescribeLogDirs("b1", "b2"),
+ ListBeginOffset(
+     "foo-1",
+     "foo-2",
+     "foo-3",
+     "bar-1",
+     "bar-2"),
+  ListEndOffset(
+     "foo-1",
+     "foo-2",
+     "foo-3",
+     "bar-1",
+     "bar-2")
 ]
 ----
-
-Output
-[source,hocon]
+|
+[source,json5,highlight=2-7]
 ----
 [
-  ReplicationFactor(foo, 3),
-  Partition(foo, 3),
-  Spread(foo, 1),
-  ReplicationFactor(foo, 3),
-  Partition(foo, 2),
-  Spread(foo, 1),
+ ReplicationFactor(foo, 3),
+ Partition(foo, 3),
+ Spread(foo, 1),
+ ReplicationFactor(foo, 3),
+ Partition(foo, 2),
+ Spread(foo, 1),
 ]
 ----
+|===
+
 
 <<<
-=== Streaming “loop”
+== Streaming “loop”
 
 image::streaming-4.png[]
 
@@ -356,41 +418,59 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
 ----
 
 <<<
-=== Stateful streaming design: sum up
+== Key takeaways
 
-* State lifetime is simply linked to stream lifetime
-* We can cleany delegate the implementation of business logic in three pure functions:
-  - updateState: user command/response from external resource => new state
-  - nextCommand: state => commands to perform on external system
-  - frontendView: state diff => informations to send to frontend
+[%step]
+* State lifetime is bound to stream lifetime
+[%step]
+* business logic is split in 3 pure functions:
+[%step]
+  - updateState: `Command|Response => State`
+  - nextCommand: `State => Requests`
+  - frontendView: `StateDiff => Info`
 
 <<<
-=== When not to use that
+== When not to use that
 
-* CQRS
-* Your datasource is fast anyway
+[%step]
+* your datasource is low-latency
+
 
 <<<
 == Takeaways
 
+<<<
+[%notitle]
+=== Takeaways
+
 image::takeaway-0.png[]
 
 <<<
+[%notitle]
 === Takeaways
 
 image::takeaway-1.png[]
 
 <<<
+[%notitle]
 === Takeaways
 
 image::takeaway-2.png[]
 
 <<<
+[.columns]
 === Takeaways
 
+[.column]
+--
 image::takeaway-0.png[]
+[.column]
+--
 image::takeaway-1.png[]
+[.column]
+--
 image::takeaway-2.png[]
+--
 
 <<<
 == Resources
@@ -401,4 +481,4 @@ image::qrcode.png[]
 
 
 [.questions]
-=== !
+== Nothing
