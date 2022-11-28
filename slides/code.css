@@ -1,3 +1,7 @@
 .reveal pre code {
     max-height: 100%;
  }
+
+.reveal section img {
+    border: none;
+}

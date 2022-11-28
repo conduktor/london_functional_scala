@@ -70,12 +70,13 @@ image::conduktor.png[]
 <<<
 == Conduktor Console
 
-
+[.stretch]
 image::conduktor-console.png[]
 
 <<<
 == Behind this screen
 
+[.stretch]
 image::dependency-graph.png[]
 
 <<<
@@ -186,7 +187,7 @@ def streamInfos: Stream[Info] =
 [%notitle]
 == What’s next?
 
-[.maxed-image]
+[.stretch]
 image::one-does-not.png[]
 
 <<<
@@ -198,6 +199,7 @@ Prefetch?
 <<<
 === frontend prefetch
 
+[.stretch]
 image::dependency-graph-statefull.svg[]
 
 <<<
@@ -393,6 +395,7 @@ Command: Topics description for  [foo, bar]
 <<<
 == Streaming “loop”
 
+[.stretch]
 image::streaming-4.png[]
 
 <<<
@@ -445,18 +448,21 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
 [%notitle]
 === Takeaways
 
+[.stretch]
 image::takeaway-0.png[]
 
 <<<
 [%notitle]
 === Takeaways
 
+[.stretch]
 image::takeaway-1.png[]
 
 <<<
 [%notitle]
 === Takeaways
 
+[.stretch]
 image::takeaway-2.png[]
 
 <<<
@@ -479,8 +485,12 @@ image::takeaway-2.png[]
 
 https://github.com/conduktor/scalaIO_2022
 
+[.stretch]
 image::qrcode.png[]
 
 
-[.questions]
+[%notitle]
 == Nothing
+
+[.stretch]
+image::cat-wearing-glasses.webp[]
