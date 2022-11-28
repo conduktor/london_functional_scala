@@ -201,7 +201,7 @@ Prefetch?
 <<<
 === frontend prefetch
 
-FIXME: diagram with steps already fetched highlighted
+image::dependency-graph-statefull.svg[]
 
 <<<
 === stateful backend
@@ -223,7 +223,7 @@ image::streaming-2.png[]
 <<<
 == Mealy machine aka mapAccum(ZIO)
 
-FIXME: paste mapAccum with mask of the middle
+image::streaming-3-5.svg[]
 
 <<<
 === Mealy machine aka mapAccum(ZIO)
