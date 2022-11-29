@@ -38,7 +38,7 @@ Matthieu Baechler
 <<<
 === We are Conduktor
 
-[.maxed-image]
+[.stretch]
 image::conduktor.png[]
 
 
@@ -88,7 +88,8 @@ image::dependency-graph.png[]
 
 We have GraphQL, let’s load everything (20 topics) at once for our screen
 
-image::graphql.png[]
+[.stretch]
+image::graphql.svg[]
 
 <<<
 === Solution 1: Single request
@@ -114,26 +115,31 @@ def getAllTopics: ZIO[Any, Throwable, Map[TopicName, TopicMetadatas]] =
 
 What about loading all topic names then query details for displayed topics?
 
-image::split-graphql.png[]
+[.stretch]
+image::split-graphql.svg[]
 
 <<<
 === Solution 3: Restful
 
 Having an endpoint for each Kafka admin requests.
-image::restfull.svg[]
+
+[.stretch]
+image::restful.svg[]
 
 <<<
 === API granularity
 
 What about loading all topic names then query details for displayed topics?
 
-image::api-granularity.excalidraw.png[]
+[.stretch]
+image::api-granularity.svg[]
 
 
 <<<
 === Solution 4: Streaming design
 
-image::streaming.png[]
+[.stretch]
+image::streaming.svg[]
 
 <<<
 === Streaming design: tapir endpoint definition
@@ -236,21 +242,25 @@ image::dependency-graph-statefull.svg[]
 <<<
 === Long living stream + commands
 
+[.stretch]
 image::streaming-1.png[]
 
 <<<
 === Long living stream + commands
 
+[.stretch]
 image::streaming-2.png[]
 
 <<<
 == Mealy machine aka mapAccum(ZIO)
 
+[.stretch]
 image::streaming-3-5.svg[]
 
 <<<
 === Mealy machine aka mapAccum(ZIO)
 
+[.stretch]
 image::streaming-3.png[]
 
 <<<
