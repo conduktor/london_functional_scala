@@ -88,7 +88,22 @@ image::dependency-graph.png[]
 
 We have GraphQL, let’s load everything (20 topics) at once for our screen
 
-FIXME: put code snippet
+(Pseudo code does not compile)
+[source,scala]
+----
+def getAllTopics: ZIO[Any, Throwable, Map[TopicName, TopicMetadatas]] =
+  for {
+    names <- kafkaService.listTopicNames.map(_.toSet)
+
+    brokerIds  <- kafkaService.getBrokerIds
+    brokerCount = BrokerCount(brokerIds.length)
+
+    topicSizes <- kafkaService.getTopicSize(brokerIds)
+
+    topicDescriptions <- describeTopics(names.toList)
+    topicRecordCount  <- countRecordForPartitions(topicDescriptions)
+  } yield regroupIntoTopicMetadatas(topicSizes, topicDescriptions, topicRecordCount)
+----
 
 image::graphql.png[]
 
