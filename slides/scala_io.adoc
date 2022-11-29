@@ -252,13 +252,13 @@ image::streaming-1.png[]
 image::streaming-2.png[]
 
 <<<
-== Mealy machine aka mapAccum(ZIO)
+== mapAccum(ZIO)
 
 [.stretch]
 image::streaming-3-5.svg[]
 
 <<<
-=== Mealy machine aka mapAccum(ZIO)
+=== mapAccum(ZIO)
 
 [.stretch]
 image::streaming-3.png[]
@@ -447,11 +447,10 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
    } yield {
      inputs
        .mapAccumZIO(State.empty) { (state, input) =>
-         val (stateUpdatedWithInput, diff) = applyInput(state, input)
-         val requests                      = nextRequests(stateUpdatedWithInput, diff)
-         val updatedState                  = applyRequests(stateUpdatedWithInput, requests)
-         val infos                         = toInfo(updatedState, diff)
-         executeRequests(responsesQueue)(requests).as((updatedState, infos))
+         val (newState, diff) = applyInput(state, input)
+         val requests         = nextRequests(newState, diff)
+         val infos            = toInfo(newState, diff)
+         executeRequests(responsesQueue)(requests).as((newState, infos))
        }
    })
 ----
@@ -465,7 +464,7 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
 * business logic is split in 3 pure functions:
 [%step]
   - updateState: `Command|Response => State`
-  - nextCommand: `State => Requests`
+  - nextRequests: `State => Requests`
   - frontendView: `StateDiff => Info`
 
 <<<
@@ -476,7 +475,7 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
 
 
 <<<
-== Takeaways
+== Conclusion
 
 <<<
 [%notitle]
