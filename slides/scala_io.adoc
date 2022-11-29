@@ -508,4 +508,4 @@ image::qrcode.png[]
 == Nothing
 
 [.stretch]
-image::question.jpg[]
+image::cat-wearing-glasses.webp[]
