@@ -483,6 +483,7 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
 
 [%step]
 * your datasource is low-latency
+* you might not need state
 
 
 <<<
@@ -510,24 +511,17 @@ image::takeaway-1.png[]
 image::takeaway-2.png[]
 
 <<<
-[.columns]
-=== Takeaways
+== We are hiring!
 
-[.column]
---
-image::takeaway-0.png[]
-[.column]
---
-image::takeaway-1.png[]
-[.column]
---
-image::takeaway-2.png[]
---
+[.stretch]
+image::hiring.png[]
+
+https://www.conduktor.io/open-positions
 
 <<<
 == Resources
 
-https://github.com/conduktor/scalaIO_2022
+https://github.com/conduktor/london_functional_scala
 
 [.stretch]
 image::qrcode.png[]
