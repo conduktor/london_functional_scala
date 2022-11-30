@@ -286,6 +286,7 @@ Command: Subscribe
 {
   "Topics": "Loading",
   "BrokerIds": "Loading",
+  "LogDirs": {},
   "Descriptions": {}
 }
 ----
@@ -318,6 +319,7 @@ Command: TopicNames [foo, bar]
 {
   "Topics": ["foo", "bar"],
   "BrokerIds": "Loading",
+  "LogDirs": {},
   "Descriptions":
     { "foo": "Loading"
     , "bar": "Loading"
@@ -355,6 +357,10 @@ Command: BrokerIds  [b1, b2]
 {
   "Topics": ["foo", "bar"],
   "BrokerIds": ["b1", "b2"],
+  "LogDirs": {
+     "b1": "Loading",
+     "b2": "Loading"
+  },
   "Descriptions":
     { "foo": "Loading"
     , "bar": "Loading"
@@ -391,6 +397,10 @@ Command: Topics description for  [foo, bar]
 {
  "Topics": ["foo", "bar"],
  "BrokerIds": ["b1", "b2"],
+  "LogDirs": {
+     "b1": "Loading",
+     "b2": "Loading"
+  },
  "Descriptions":
  { "foo":
    { "partitions": 3,
