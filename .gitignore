@@ -3,3 +3,5 @@
 .idea
 target
 elm-stuff
+reveal/scala_io.html
+reveal/functional_scala.html

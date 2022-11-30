@@ -125,7 +125,11 @@ decreasePage model =
     in
     if page > 0 then
         { model
+<<<<<<< HEAD
             | page =  (pageNumber model.page - 1) |> max 0 |> Page
+=======
+            | page = Page (pageNumber model.page - 1)
+>>>>>>> 56593f2 (Implement websocket + pagination)
             , topics = []
         }
 

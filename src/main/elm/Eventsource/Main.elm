@@ -56,6 +56,15 @@ failure msg =
     ( Failure msg, Cmd.none )
 
 
+failure : String -> ( Model, Cmd Msg )
+failure msg =
+    let
+        _ =
+            Debug.log msg
+    in
+    ( Failure msg, Cmd.none )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case ( msg, model ) of

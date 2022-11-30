@@ -1,0 +1,534 @@
+= When stateless APIs are not enough: deep dive into a  streaming backend design
+
+Luc Duzan & Matthieu Baechler
+
+:revealjs_hash: true
+:revealjs_slideNumber: true
+:revealjs_fragmentInURL: true
+:revealjs_center: false
+:imagesdir: ./images
+:sourcedir: ../src/main/scala
+
+<<<
+[.columns]
+== Who are we?
+
+[.column]
+--
+image::luc.jpg[width=200]
+
+Luc Duzan
+
+ * Software Engineer @ Conduktor
+ * Bike enthusiast
+ * @strokyl on twitter
+--
+
+[.column]
+--
+image::matthieu.jpg[width=200]
+
+Matthieu Baechler
+
+ * Older Software Engineer @ Conduktor
+ * Free Software enthusiat
+ * @m_baechler on twitter
+--
+
+<<<
+=== We are Conduktor
+
+[.stretch]
+image::conduktor.png[]
+
+
+<<<
+=== We are building High Fidelity tools
+
+[%step]
+ * Seeking best UX
+[%step]
+   - Discoverability
+   - Precision
+   - Best latency
+
+
+<<<
+== Speaking about Kafka
+
+[%step]
+* Scale can be massive
+  - ~ 1 000 topics
+  - ~ 100 000 partitions
+  - ~ millions of messages per second
+* Fast
+  - publishing messages
+  - consuming messages
+* Not Fast
+  - metadata
+
+<<<
+== Conduktor Console
+
+[.stretch]
+image::conduktor-console.png[]
+
+<<<
+== Behind this screen
+
+[.stretch]
+image::dependency-graph.png[]
+
+<<<
+== Exploring solutions
+
+
+<<<
+=== Solution 1: Single request
+
+We have GraphQL, let’s load everything (20 topics) at once for our screen
+
+[.stretch]
+image::graphql.svg[]
+
+<<<
+=== Solution 1: Single request
+
+[source,scala]
+----
+def getAllTopics: ZIO[Any, Throwable, Map[TopicName, TopicMetadatas]] =
+  for {
+    names <- kafkaService.listTopicNames.map(_.toSet)
+
+    brokerIds  <- kafkaService.getBrokerIds
+    brokerCount = BrokerCount(brokerIds.length)
+
+    topicSizes <- kafkaService.getTopicSize(brokerIds)
+
+    topicDescriptions <- describeTopics(names.toList)
+    topicRecordCount  <- countRecordForPartitions(topicDescriptions)
+  } yield regroupIntoTopicMetadatas(topicSizes, topicDescriptions, topicRecordCount)
+----
+
+<<<
+=== Solution 2: Query in two steps
+
+What about loading all topic names then query details for displayed topics?
+
+[.stretch]
+image::split-graphql.svg[]
+
+<<<
+=== Solution 3: Restful
+
+Having an endpoint for each Kafka admin requests.
+
+[.stretch]
+image::restful.svg[]
+
+<<<
+=== API granularity
+
+What about loading all topic names then query details for displayed topics?
+
+[.stretch]
+image::api-granularity.svg[]
+
+
+<<<
+=== Solution 4: Streaming design
+
+[.stretch]
+image::streaming.svg[]
+
+<<<
+=== Streaming design: tapir endpoint definition
+
+[source,scala]
+----
+trait TopicInfoStreamService {
+ def streamInfos: ZStream[Any, Throwable, Info]
+}
+
+val infos = endpoint.get
+ .in("streaming")
+ .errorOut(jsonBody[ErrorInfo])
+ .out(serverSentEventsBody)
+ .zServerLogic(_ =>
+   ZIO.succeed(topicInfoStreamService.streamInfos.map { info =>
+     ServerSentEvent(data = Some(info.asJson.spaces2))
+   })
+ )
+----
+
+<<<
+=== Streaming design: ADT
+
+[source,scala]
+----
+sealed trait Info
+
+case object Complete                                                              extends Info
+case class Topics(topics: Set[TopicName])                                         extends Info
+case class Size(topicName: TopicName, size: TopicSize)                            extends Info
+case class RecordCountInfo(topicName: TopicName, count: RecordCount)              extends Info
+case class PartitionInfo(topicName: TopicName, partition: Partition)              extends Info
+case class ReplicationFactorInfo(topicName: TopicName, factor: RepFactor)         extends Info
+case class SpreadInfo(topicName: TopicName, spread: Spread)                       extends Info
+----
+
+<<<
+=== Streaming design: service implementation
+
+[source,scala]
+----
+def streamInfos: Stream[Info] =
+ streamThings { queue =>
+   for {
+     names <- kafkaService.listTopicNames.map(_.toSet).tap(queue.sendNames)
+
+     brokerIds  <- kafkaService.getBrokerIds
+     brokerCount = BrokerCount(brokerIds.length)
+
+     _ <- kafkaService.getTopicSize(brokerIds).forEachZIO(queue.sendSizes)
+
+     _ <- describeTopics(names.toList)
+            .tap(queue.sendSpreadPartitionAndReplicationFactor(brokerCount))
+            .viaFunction(countRecordForPartitions)
+            .tap(queue.sendRecordCount)
+            .runDrain
+
+     _ <- queue.complete
+   } yield ()
+ }
+----
+
+<<<
+== Key takeaways
+
+[%step]
+* Streaming endpoint
+[%step]
+  - No trade off between latency and overall run time
+  - No impact on frontend code complexity
+  - Very few changes in backend part
+
+<<<
+[%notitle]
+== What’s next?
+
+[.stretch]
+image::one-does-not.png[]
+
+<<<
+== Loading next page
+
+[%step]
+Prefetch?
+
+<<<
+=== frontend prefetch
+
+[.stretch]
+image::dependency-graph-statefull.svg[]
+
+<<<
+=== stateful backend
+
+[%step]
+* We need to keep a state between “requests”
+* Bind the state lifetime with the client connection
+
+<<<
+=== Long living stream + commands
+
+[.stretch]
+image::streaming-1.png[]
+
+<<<
+=== Long living stream + commands
+
+[.stretch]
+image::streaming-2.png[]
+
+<<<
+[transition=fade-in]
+== mapAccum
+
+[.stretch]
+image::streaming-3-5.png[]
+
+<<<
+[transition=fade-in]
+=== mapAccum
+
+[.stretch]
+image::streaming-3.png[]
+
+<<<
+[transition=fade-in]
+=== mapAccumZIO
+
+[.stretch]
+image::streaming-zio.png[]
+
+<<<
+[transition=fade-in]
+== Step by step execution
+Command: Subscribe
+
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight=2..4]
+----
+{
+  "Topics": "Loading",
+  "BrokerIds": "Loading",
+  "Descriptions": {}
+}
+----
+|
+[source,json5,highlight=2..3]
+----
+[
+  "ListTopics",
+  "ListBrokers"
+]
+----
+|
+[source,json5,highlight=1]
+----
+[]
+----
+|===
+
+<<<
+[transition=fade-in]
+=== Step by step execution
+Command: TopicNames [foo, bar]
+
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight='2,4..6']
+----
+{
+  "Topics": ["foo", "bar"],
+  "BrokerIds": "Loading",
+  "Descriptions":
+    { "foo": "Loading"
+    , "bar": "Loading"
+    }
+}
+----
+|
+[source,json5,highlight=3]
+----
+[
+  "ListBrokers",
+  "DescribeTopics[foo, bar]"
+]
+----
+|
+[source,json5,highlight=2]
+----
+[
+  "TopicNames[foo, bar]"
+]
+----
+|===
+
+<<<
+[transition=fade-in]
+=== Step by step execution
+Command: BrokerIds  [b1, b2]
+
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight='3']
+----
+{
+  "Topics": ["foo", "bar"],
+  "BrokerIds": ["b1", "b2"],
+  "Descriptions":
+    { "foo": "Loading"
+    , "bar": "Loading"
+    }
+}
+----
+|
+[source,json5,highlight=3]
+----
+[
+  "DescribeTopics[foo, bar]",
+  "DescribeLogDirs[b1, b2]"
+]
+----
+|
+[source,json5,highlight=2]
+----
+[]
+----
+|===
+
+
+<<<
+[transition=fade-in]
+=== Step by step execution
+Command: Topics description for  [foo, bar]
+
+[cols="a, a, a"]
+|===
+|State |Requests |Output
+|
+[source,json5,highlight='5..11']
+----
+{
+ "Topics": ["foo", "bar"],
+ "BrokerIds": ["b1", "b2"],
+ "Descriptions":
+ { "foo":
+   { "partitions": 3,
+     "replicationFactor": 3}
+ , "bar":
+   { "partitions": 2,
+     "replicationFactor": 3}
+ }
+}
+----
+|
+[source,json5,highlight=3..14]
+----
+[
+ DescribeLogDirs("b1", "b2"),
+ ListBeginOffset(
+     "foo-1",
+     "foo-2",
+     "foo-3",
+     "bar-1",
+     "bar-2"),
+  ListEndOffset(
+     "foo-1",
+     "foo-2",
+     "foo-3",
+     "bar-1",
+     "bar-2")
+]
+----
+|
+[source,json5,highlight=2-7]
+----
+[
+ ReplicationFactor(foo, 3),
+ Partition(foo, 3),
+ Spread(foo, 1),
+ ReplicationFactor(foo, 3),
+ Partition(foo, 2),
+ Spread(foo, 1),
+]
+----
+|===
+
+
+<<<
+== Streaming “loop”
+
+[.stretch]
+image::streaming-4.png[]
+
+<<<
+=== Stateful Streaming design
+
+[source,scala]
+----
+def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
+ ZStream
+   .unwrap(for {
+     responsesQueue       <- Queue.unbounded[Input.Response]
+     inputs: Stream[Input] = ZStream.mergeAllUnbounded(
+                                         ZStream.fromQueue(queue),
+                                         ZStream.fromQueue(responsesQueue))
+   } yield {
+     inputs
+       .mapAccumZIO(State.empty) { (state, input) =>
+         for {
+             (newState, diff) = applyInput(state, input)
+             requests         = nextRequests(newState, diff)
+             infos            = toInfo(newState, diff)
+             _                <- executeRequests(responsesQueue)(requests)
+         } yield newState -> infos
+       }
+   })
+----
+
+<<<
+== Key takeaways
+
+[%step]
+* State lifetime is bound to stream lifetime
+[%step]
+* business logic is split in 3 pure functions:
+[%step]
+  - updateState: `Command|Response => State`
+  - nextRequests: `State => Requests`
+  - frontendView: `StateDiff => Info`
+
+<<<
+== When not to use that
+
+[%step]
+* your datasource is low-latency
+* you might not need state
+
+
+<<<
+== Conclusion
+
+<<<
+[%notitle]
+=== Takeaways
+
+[.stretch]
+image::takeaway-0.png[]
+
+<<<
+[%notitle]
+=== Takeaways
+
+[.stretch]
+image::takeaway-1.png[]
+
+<<<
+[%notitle]
+=== Takeaways
+
+[.stretch]
+image::takeaway-2.png[]
+
+<<<
+== We are hiring!
+
+[.stretch]
+image::hiring.png[]
+
+https://www.conduktor.io/open-positions
+
+<<<
+== Resources
+
+https://github.com/conduktor/london_functional_scala
+
+[.stretch]
+image::qrcode.png[]
+
+
+[%notitle]
+== Nothing
+
+[.stretch]
+image::cat-wearing-glasses.webp[]
