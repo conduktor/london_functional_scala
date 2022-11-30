@@ -252,16 +252,25 @@ image::streaming-1.png[]
 image::streaming-2.png[]
 
 <<<
-== mapAccum(ZIO)
+[transition=fade-in]
+== mapAccum
 
 [.stretch]
-image::streaming-3-5.svg[]
+image::streaming-3-5.png[]
 
 <<<
-=== mapAccum(ZIO)
+[transition=fade-in]
+=== mapAccum
 
 [.stretch]
 image::streaming-3.png[]
+
+<<<
+[transition=fade-in]
+=== mapAccumZIO
+
+[.stretch]
+image::streaming-zio.png[]
 
 <<<
 [transition=fade-in]
@@ -447,10 +456,12 @@ def streamInfos(queue: Queue[Input.Command]): Stream[Info] =
    } yield {
      inputs
        .mapAccumZIO(State.empty) { (state, input) =>
-         val (newState, diff) = applyInput(state, input)
-         val requests         = nextRequests(newState, diff)
-         val infos            = toInfo(newState, diff)
-         executeRequests(responsesQueue)(requests).as((newState, infos))
+         for {
+             (newState, diff) = applyInput(state, input)
+             requests         = nextRequests(newState, diff)
+             infos            = toInfo(newState, diff)
+             _                <- executeRequests(responsesQueue)(requests)
+         } yield newState -> infos
        }
    })
 ----
