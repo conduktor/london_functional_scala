@@ -1,4 +1,4 @@
-# Scala IO 2022: Stateful backend code playground
+# Stateful backend code playground
 
 ## How to run the backend
 
