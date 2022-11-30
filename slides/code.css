@@ -5,3 +5,7 @@
 .reveal section img {
     border: none;
 }
+
+.reveal h2 {
+    text-transform: none;
+}
