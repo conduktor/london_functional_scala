@@ -281,7 +281,7 @@ Command: Subscribe
 |===
 |State |Requests |Output
 |
-[source,json5,highlight=2..4]
+[source,json5,highlight=2..3,5]
 ----
 {
   "Topics": "Loading",
@@ -314,7 +314,7 @@ Command: TopicNames [foo, bar]
 |===
 |State |Requests |Output
 |
-[source,json5,highlight='2,4..6']
+[source,json5,highlight='2,5..7']
 ----
 {
   "Topics": ["foo", "bar"],
@@ -352,7 +352,7 @@ Command: BrokerIds  [b1, b2]
 |===
 |State |Requests |Output
 |
-[source,json5,highlight='3']
+[source,json5,highlight='3-6']
 ----
 {
   "Topics": ["foo", "bar"],
@@ -392,7 +392,7 @@ Command: Topics description for  [foo, bar]
 |===
 |State |Requests |Output
 |
-[source,json5,highlight='5..11']
+[source,json5,highlight='9..14']
 ----
 {
  "Topics": ["foo", "bar"],
